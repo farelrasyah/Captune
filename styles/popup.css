@@ -11,14 +11,17 @@ body {
     line-height: 1.4;
     background: #ffffff;
     color: #333333;
-    width: 400px;
-    min-height: 600px;
+    width: 380px;
+    min-width: 380px;
+    max-width: 380px;
+    overflow-x: hidden;
 }
 
 .container {
     display: flex;
     flex-direction: column;
-    height: 100vh;
+    min-height: 500px;
+    max-height: 600px;
 }
 
 /* Header */
@@ -26,7 +29,7 @@ body {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 16px 20px;
+    padding: 12px 16px;
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
     border-bottom: 1px solid rgba(255, 255, 255, 0.1);
@@ -39,12 +42,12 @@ body {
 }
 
 .logo-img {
-    width: 24px;
-    height: 24px;
+    width: 20px;
+    height: 20px;
 }
 
 .logo h1 {
-    font-size: 18px;
+    font-size: 16px;
     font-weight: 600;
     margin: 0;
 }
@@ -60,22 +63,23 @@ body {
 /* Main Content */
 .main-content {
     flex: 1;
-    padding: 20px;
+    padding: 16px;
     overflow-y: auto;
+    overflow-x: hidden;
 }
 
 section {
-    margin-bottom: 24px;
+    margin-bottom: 20px;
 }
 
 section h2 {
-    font-size: 16px;
+    font-size: 14px;
     font-weight: 600;
-    margin-bottom: 12px;
+    margin-bottom: 10px;
     color: #2c3e50;
     display: flex;
     align-items: center;
-    gap: 8px;
+    gap: 6px;
 }
 
 section h2::before {
@@ -103,16 +107,18 @@ section h2::before {
     flex-direction: column;
     align-items: center;
     gap: 4px;
-    padding: 12px 8px;
+    padding: 10px 6px;
     border: 1px solid #e1e5e9;
-    border-radius: 8px;
+    border-radius: 6px;
     background: #ffffff;
     color: #333333;
     text-decoration: none;
     cursor: pointer;
     transition: all 0.2s ease;
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 500;
+    min-height: 60px;
+    text-align: center;
 }
 
 .action-btn:hover,
@@ -219,11 +225,11 @@ section h2::before {
 
 /* Footer */
 .footer {
-    padding: 16px 20px;
+    padding: 12px 16px;
     border-top: 1px solid #e9ecef;
     background: #f8f9fa;
     display: flex;
-    gap: 8px;
+    gap: 6px;
 }
 
 .footer-btn {
@@ -364,6 +370,80 @@ section h2::before {
     .options-grid {
         grid-template-columns: 1fr;
     }
+}
+
+/* Popup Specific Fixes */
+html, body {
+    width: 380px !important;
+    max-width: 380px !important;
+    overflow-x: hidden !important;
+}
+
+.container {
+    width: 100%;
+    max-width: 100%;
+}
+
+/* Responsive adjustments for small screens */
+@media (max-width: 400px) {
+    body {
+        width: 350px !important;
+        max-width: 350px !important;
+    }
+    
+    .action-grid,
+    .device-grid,
+    .batch-grid {
+        grid-template-columns: 1fr;
+    }
+    
+    .main-content {
+        padding: 12px;
+    }
+    
+    .header {
+        padding: 10px 12px;
+    }
+    
+    .footer {
+        padding: 10px 12px;
+    }
+}
+
+/* Ensure text doesn't overflow */
+.action-btn span,
+.device-btn span,
+.batch-btn span {
+    word-wrap: break-word;
+    overflow-wrap: break-word;
+    hyphens: auto;
+    max-width: 100%;
+}
+
+/* Loading and Error States */
+.loading {
+    opacity: 0.6;
+    pointer-events: none;
+}
+
+.error-message {
+    color: #e74c3c;
+    font-size: 12px;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: rgba(231, 76, 60, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid #e74c3c;
+}
+
+.success-message {
+    color: #27ae60;
+    font-size: 12px;
+    margin-top: 4px;
+    padding: 4px 8px;
+    background: rgba(39, 174, 96, 0.1);
+    border-radius: 4px;
+    border-left: 3px solid #27ae60;
 }
 
 /* Dark theme support */
