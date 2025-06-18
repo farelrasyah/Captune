@@ -929,7 +929,17 @@ class CaptuneContent {
         await this.waitForScroll();
     }    async captureSelection(rect) {
         try {
-            // Capture visible area first
+            // Hide overlay elements to ensure clean capture
+            const overlayDisplay = this.selectionOverlay.style.display;
+            const boxDisplay = this.selectionBox.style.display;
+            
+            this.selectionOverlay.style.display = 'none';
+            this.selectionBox.style.display = 'none';
+            
+            // Wait a moment for the UI to update
+            await new Promise(resolve => setTimeout(resolve, 50));
+            
+            // Capture visible area
             const result = await chrome.runtime.sendMessage({
                 action: 'captureVisible',
                 options: {
@@ -953,12 +963,18 @@ class CaptuneContent {
                     filename: `captune-selection-${Date.now()}.${settings.outputFormat}`
                 });
             }
+            
+            // Restore overlay visibility (though selection mode will end anyway)
+            this.selectionOverlay.style.display = overlayDisplay;
+            this.selectionBox.style.display = boxDisplay;
+            
         } catch (error) {
             console.error('Failed to capture selection:', error);
+            // Restore overlay visibility in case of error
+            this.selectionOverlay.style.display = 'block';
+            this.selectionBox.style.display = 'block';
         }
-    }
-
-    async captureClickedElement(element) {
+    }    async captureClickedElement(element) {
         try {
             // Get element bounds with scroll offset
             const rect = element.getBoundingClientRect();
@@ -972,6 +988,13 @@ class CaptuneContent {
             // Ensure element is in viewport
             element.scrollIntoView({ behavior: 'smooth', block: 'center' });
             await this.waitForScroll();
+
+            // Hide any overlay elements that might interfere
+            const overlayDisplay = this.elementHighlight.style.display;
+            this.elementHighlight.style.display = 'none';
+            
+            // Wait a moment for the UI to update
+            await new Promise(resolve => setTimeout(resolve, 50));
 
             // Capture visible area
             const result = await chrome.runtime.sendMessage({
@@ -993,13 +1016,18 @@ class CaptuneContent {
                 });
                 
                 chrome.runtime.sendMessage({
-                    action: 'downloadImage',
-                    data: croppedImage,
+                    action: 'downloadImage',                    data: croppedImage,
                     filename: `captune-element-${Date.now()}.${settings.outputFormat}`
                 });
             }
+            
+            // Restore highlight visibility
+            this.elementHighlight.style.display = overlayDisplay;
+            
         } catch (error) {
             console.error('Failed to capture element:', error);
+            // Restore highlight visibility in case of error
+            this.elementHighlight.style.display = 'none';
         }
     }
 
@@ -1025,23 +1053,31 @@ class CaptuneContent {
         } catch (error) {
             return { success: false, error: error.message };
         }
-    }
-
-    async cropImage(imageData, rect) {
+    }    async cropImage(imageData, rect) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = await this.loadImage(imageData);
 
-        canvas.width = rect.width;
-        canvas.height = rect.height;
+        // Set canvas size to match the selection
+        canvas.width = Math.round(rect.width);
+        canvas.height = Math.round(rect.height);
 
+        // Enable high-quality image rendering
+        ctx.imageSmoothingEnabled = true;
+        ctx.imageSmoothingQuality = 'high';
+        
+        // Clear canvas to ensure clean background
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+        // Draw the cropped portion of the image
         ctx.drawImage(
             img,
-            rect.left, rect.top, rect.width, rect.height,
-            0, 0, rect.width, rect.height
+            Math.round(rect.left), Math.round(rect.top), Math.round(rect.width), Math.round(rect.height),
+            0, 0, Math.round(rect.width), Math.round(rect.height)
         );
 
-        return canvas.toDataURL('image/png');
+        // Return high-quality PNG
+        return canvas.toDataURL('image/png', 1.0);
     }
 
     async captureFullPageSimple(settings) {
