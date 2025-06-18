@@ -120,7 +120,11 @@ class CaptuneContent {
             // Auto-expand dynamic content first if requested
             if (settings.autoExpand) {
                 console.log('Expanding dynamic content...');
-                await this.expandDynamicContent();
+                try {
+                    await this.expandDynamicContent();
+                } catch (expandError) {
+                    console.warn('Dynamic content expansion failed, continuing...', expandError);
+                }
             }
             
             // Get final page dimensions after expansion
@@ -130,34 +134,84 @@ class CaptuneContent {
             // Handle sticky elements (hide them to avoid duplication)
             if (!settings.includeSticky) {
                 this.hideStickyElements();
-            }
-
-            // Try simple method first for small pages
+            }            // Try simple method first for small pages with retry
             if (dimensions.scrollHeight <= window.innerHeight * 2) {
                 console.log('Page is relatively small, attempting simple capture...');
-                var simpleResult = await this.captureFullPageSimple(settings);
                 
-                if (simpleResult.success) {
-                    console.log('Simple capture successful for full page');
+                // Try simple capture with retries
+                for (let attempt = 1; attempt <= 3; attempt++) {
+                    try {
+                        console.log(`Simple capture attempt ${attempt}/3`);
+                        
+                        // Wait longer on retry attempts
+                        if (attempt > 1) {
+                            await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+                        }
+                        
+                        var simpleResult = await this.captureFullPageSimple(settings);
+                        
+                        if (simpleResult.success) {
+                            console.log(`Simple capture successful on attempt ${attempt}`);
+                            this.cleanup();
+                            return simpleResult;
+                        }
+                    } catch (simpleError) {
+                        console.warn(`Simple capture attempt ${attempt} failed:`, simpleError);
+                        if (attempt === 3) {
+                            console.log('All simple capture attempts failed, falling back to stitching');
+                        }
+                    }
+                }
+            }
+              console.log('Using viewport stitching for complete page capture...');
+
+            // Perform complete full page capture using viewport stitching with retry
+            for (let stitchAttempt = 1; stitchAttempt <= 3; stitchAttempt++) {
+                try {
+                    console.log(`Stitching attempt ${stitchAttempt}/3`);
+                    
+                    // Wait before retry attempts  
+                    if (stitchAttempt > 1) {
+                        await new Promise(resolve => setTimeout(resolve, 2000 * stitchAttempt));
+                        console.log('Page stabilization wait completed');
+                    }
+                    
+                    var imageData = await this.performFullPageCapture(dimensions, settings);
+
+                    // Cleanup before returning
                     this.cleanup();
-                    return simpleResult;
+                    
+                    console.log(`COMPLETE full page capture finished successfully on attempt ${stitchAttempt}`);
+                    return { success: true, data: imageData };
+                    
+                } catch (stitchError) {
+                    console.error(`Stitching attempt ${stitchAttempt} failed:`, stitchError);
+                    
+                    if (stitchAttempt === 3) {
+                        console.log('All stitching attempts failed, trying final fallback...');
+                        
+                        // Try fallback simple capture without size restriction
+                        try {
+                            console.log('Attempting final fallback simple capture...');
+                            await new Promise(resolve => setTimeout(resolve, 1000));
+                            var fallbackResult = await this.captureFullPageSimple(settings);
+                            this.cleanup();
+                            return fallbackResult;
+                        } catch (fallbackError) {
+                            console.error('Final fallback failed:', fallbackError);
+                            throw new Error('All capture methods failed after multiple attempts');
+                        }
+                    }
                 }
             }
             
-            console.log('Using viewport stitching for complete page capture...');
-
-            // Perform complete full page capture using viewport stitching
-            var imageData = await this.performFullPageCapture(dimensions, settings);
-
-            // Cleanup before returning
-            this.cleanup();
-            
-            console.log('COMPLETE full page capture finished successfully');
-            return { success: true, data: imageData };
         } catch (error) {
             console.error('Complete full page capture failed:', error);
             this.cleanup();
-            return { success: false, error: error.message };
+            return { 
+                success: false, 
+                error: `Capture failed: ${error.message} 🔧 Troubleshooting: • Refresh the page and try again • Check if page allows screenshots • Try with different settings • Some dynamic pages require manual scrolling first`
+            };
         } finally {
             this.isCapturing = false;
         }
@@ -346,10 +400,22 @@ class CaptuneContent {
         }
     }    async performFullPageCapture(dimensions, settings) {
         console.log('Starting ULTRA COMPLETE full page capture with dimensions:', dimensions);
-        
-        // Store original scroll position
+          // Test background script communication first
+        try {
+            const pingResult = await this.reliableBackgroundMessage({ action: 'ping' });
+            if (!pingResult || !pingResult.success) {
+                throw new Error('Background script not responding');
+            }
+            console.log('✓ Background script communication test passed');
+        } catch (pingError) {
+            throw new Error(`Cannot communicate with background script: ${pingError.message}`);
+        }
+          // Store original scroll position
         var originalScrollX = window.scrollX;
         var originalScrollY = window.scrollY;
+        
+        // Wait for page to be stable before starting
+        await this.waitForPageStability();
         
         // Force scroll to absolute top first
         window.scrollTo(0, 0);
@@ -366,23 +432,27 @@ class CaptuneContent {
             capturesNeeded: Math.ceil(totalHeight / viewportHeight),
             startFromTop: true
         });
-        
-        // If page is very short, just capture visible area
+          // If page is very short, just capture visible area
         if (totalHeight <= viewportHeight + 50) {
             console.log('Page fits in single viewport, capturing directly');
             window.scrollTo(0, 0); // Ensure we're at top
             await new Promise(resolve => setTimeout(resolve, 200));
             
-            var result = await chrome.runtime.sendMessage({
-                action: 'captureVisible',
-                options: { format: 'png', quality: 100 }
-            });
+            var result;
+            try {
+                result = await chrome.runtime.sendMessage({
+                    action: 'captureVisible',
+                    options: { format: 'png', quality: 100 }
+                });
+            } catch (captureError) {
+                throw new Error(`Failed to capture single viewport: ${captureError.message}`);
+            }
             
-            if (result.success) {
+            if (result && result.success) {
                 window.scrollTo(originalScrollX, originalScrollY);
                 return result.data;
             } else {
-                throw new Error('Failed to capture short page');
+                throw new Error(`Failed to capture short page: ${result?.error || 'Unknown error'}`);
             }
         }
         
@@ -425,32 +495,56 @@ class CaptuneContent {
                 
                 var finalScrollY = window.scrollY;
                 console.log(`Final scroll position: ${finalScrollY} (target: ${currentY})`);
-                
-                // Calculate how much content this capture will cover
+                  // Calculate how much content this capture will cover
                 var remainingHeight = totalHeight - finalScrollY;
                 var captureHeight = Math.min(viewportHeight, remainingHeight);
                 
-                // Capture current viewport
-                var result = await chrome.runtime.sendMessage({
-                    action: 'captureVisible',
-                    options: { format: 'png', quality: 100 }
+                // Capture current viewport with retry mechanism
+                var result = null;
+                var captureSuccess = false;
+                
+                for (let captureAttempt = 1; captureAttempt <= 3; captureAttempt++) {
+                    try {
+                        console.log(`Capturing viewport attempt ${captureAttempt}/3 at position ${finalScrollY}`);
+                          // Wait before retry attempts to let page stabilize
+                        if (captureAttempt > 1) {
+                            await new Promise(resolve => setTimeout(resolve, 500 * captureAttempt));
+                        }
+                        
+                        result = await this.reliableBackgroundMessage({
+                            action: 'captureVisible',
+                            options: { format: 'png', quality: 100 }
+                        });
+                        
+                        if (result && result.success) {
+                            captureSuccess = true;
+                            break;
+                        } else {
+                            console.warn(`Capture attempt ${captureAttempt} failed: ${result?.error || 'Unknown error'}`);
+                        }
+                        
+                    } catch (captureError) {
+                        console.error(`Capture attempt ${captureAttempt} failed:`, captureError);
+                        if (captureAttempt === 3) {
+                            throw new Error(`Failed to capture viewport after 3 attempts: ${captureError.message}`);
+                        }
+                    }
+                }
+                
+                if (!captureSuccess || !result) {
+                    throw new Error('Failed to capture viewport after multiple attempts');
+                }
+                  captures.push({
+                    dataUrl: result.data,
+                    scrollY: finalScrollY,
+                    captureHeight: captureHeight,
+                    targetY: currentY,
+                    index: captureIndex,
+                    coverageStart: finalScrollY,
+                    coverageEnd: finalScrollY + captureHeight
                 });
                 
-                if (result.success) {
-                    captures.push({
-                        dataUrl: result.data,
-                        scrollY: finalScrollY,
-                        captureHeight: captureHeight,
-                        targetY: currentY,
-                        index: captureIndex,
-                        coverageStart: finalScrollY,
-                        coverageEnd: finalScrollY + captureHeight
-                    });
-                    
-                    console.log(`✓ CAPTURED section ${captureIndex}: Y=${finalScrollY}, height=${captureHeight}, covers ${finalScrollY} to ${finalScrollY + captureHeight}`);
-                } else {
-                    throw new Error(`Failed to capture viewport at position ${currentY}`);
-                }
+                console.log(`✓ CAPTURED section ${captureIndex}: Y=${finalScrollY}, height=${captureHeight}, covers ${finalScrollY} to ${finalScrollY + captureHeight}`);
                 
                 // Determine if we've covered the entire page
                 if (finalScrollY + viewportHeight >= totalHeight - 10) {
@@ -504,93 +598,127 @@ class CaptuneContent {
             viewportWidth: viewportWidth
         });
         
-        // Create canvas with exact dimensions
-        var canvas = document.createElement('canvas');
-        var ctx = canvas.getContext('2d');
-        
-        // Set canvas dimensions to exact page size with proper scaling
-        var scale = settings.retinaQuality ? (window.devicePixelRatio || 1) : 1;
-        canvas.width = viewportWidth * scale;
-        canvas.height = totalHeight * scale;
-        
-        console.log('Ultra complete canvas setup:', {
-            canvasWidth: canvas.width,
-            canvasHeight: canvas.height,
-            scale: scale,
-            devicePixelRatio: window.devicePixelRatio
-        });
-        
-        // Fill with perfect white background
-        ctx.fillStyle = '#ffffff';
-        ctx.fillRect(0, 0, canvas.width, canvas.height);
-        
-        // Validate coverage before stitching
-        var expectedCoverage = [];
-        var currentPos = 0;
-        for (var i = 0; i < captures.length; i++) {
-            var capture = captures[i];
-            expectedCoverage.push({
-                index: i + 1,
-                start: currentPos,
-                end: currentPos + capture.captureHeight,
-                actualScrollY: capture.scrollY
+        try {
+            // Create canvas with exact dimensions
+            var canvas = document.createElement('canvas');
+            var ctx = canvas.getContext('2d');
+            
+            // Check if canvas creation succeeded
+            if (!canvas || !ctx) {
+                throw new Error('Failed to create canvas or get context');
+            }
+            
+            // Set canvas dimensions to exact page size with proper scaling
+            var scale = settings.retinaQuality ? (window.devicePixelRatio || 1) : 1;
+            var canvasWidth = viewportWidth * scale;
+            var canvasHeight = totalHeight * scale;
+            
+            // Check for reasonable canvas size to avoid memory issues
+            var maxCanvasSize = 32767; // Maximum canvas dimension in most browsers
+            if (canvasWidth > maxCanvasSize || canvasHeight > maxCanvasSize) {
+                console.warn('Canvas size too large, reducing scale');
+                scale = Math.min(maxCanvasSize / viewportWidth, maxCanvasSize / totalHeight, 1);
+                canvasWidth = viewportWidth * scale;
+                canvasHeight = totalHeight * scale;
+            }
+            
+            canvas.width = canvasWidth;
+            canvas.height = canvasHeight;
+            
+            console.log('Ultra complete canvas setup:', {
+                canvasWidth: canvas.width,
+                canvasHeight: canvas.height,
+                scale: scale,
+                devicePixelRatio: window.devicePixelRatio
             });
-            currentPos += capture.captureHeight;
-        }
-        
-        console.log('Coverage validation:', expectedCoverage);
-        
-        // Process each capture with perfect positioning
-        for (var i = 0; i < captures.length; i++) {
-            var capture = captures[i];
-            console.log(`Processing section ${i + 1}/${captures.length}: scroll=${capture.scrollY}, target=${capture.targetY}`);
+            
+            // Fill with perfect white background
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Validate coverage before stitching
+            var expectedCoverage = [];
+            var currentPos = 0;
+            for (var i = 0; i < captures.length; i++) {
+                var capture = captures[i];
+                expectedCoverage.push({
+                    index: i + 1,
+                    start: currentPos,
+                    end: currentPos + capture.captureHeight,
+                    actualScrollY: capture.scrollY
+                });
+                currentPos += capture.captureHeight;
+            }
+            
+            console.log('Coverage validation:', expectedCoverage);
+            
+            // Process each capture with perfect positioning
+            for (var i = 0; i < captures.length; i++) {
+                var capture = captures[i];
+                console.log(`Processing section ${i + 1}/${captures.length}: scroll=${capture.scrollY}, target=${capture.targetY}`);
+                
+                try {
+                    var img = await this.loadImage(capture.dataUrl);
+                    
+                    // Verify image loaded successfully
+                    if (!img || !img.width || !img.height) {
+                        throw new Error('Invalid image data');
+                    }
+                    
+                    // Calculate exact destination position on canvas
+                    var destY = capture.scrollY * scale;
+                    var destHeight = capture.captureHeight * scale;
+                    
+                    // Ensure perfect bounds
+                    if (destY + destHeight > canvas.height) {
+                        destHeight = canvas.height - destY;
+                        console.log(`Adjusted height for section ${i + 1} to fit canvas: ${destHeight / scale}px`);
+                    }
+                    
+                    // Perfect pixel placement - no gaps, no overlaps
+                    ctx.drawImage(
+                        img, // source image
+                        0, 0, img.width, img.height, // source rectangle (full image)
+                        0, destY, canvas.width, destHeight // destination rectangle
+                    );
+                    
+                    console.log(`✓ Placed section ${i + 1}: Y=${destY / scale} to ${(destY + destHeight) / scale}, height=${destHeight / scale}px`);
+                    
+                } catch (error) {
+                    console.error(`Error processing section ${i + 1}:`, error);
+                    throw new Error(`Failed to process capture section ${i + 1}: ${error.message}`);
+                }
+            }
+            
+            // Final verification
+            var lastCapture = captures[captures.length - 1];
+            var actualCoverageEnd = lastCapture.scrollY + lastCapture.captureHeight;
+            var coveragePercent = (actualCoverageEnd / totalHeight) * 100;
+            
+            console.log('✓ ULTRA COMPLETE STITCH VERIFICATION:', {
+                totalPageHeight: totalHeight,
+                actualCoverageEnd: actualCoverageEnd,
+                coveragePercent: coveragePercent.toFixed(1) + '%',
+                isComplete: coveragePercent >= 99
+            });
+            
+            // Convert to final output format
+            var format = settings.outputFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+            var quality = settings.outputFormat === 'jpeg' ? 0.95 : 1.0;
+            
+            console.log('✓ ULTRA COMPLETE PAGE CAPTURE FINISHED - Converting to', format);
             
             try {
-                var img = await this.loadImage(capture.dataUrl);
-                
-                // Calculate exact destination position on canvas
-                var destY = capture.scrollY * scale;
-                var destHeight = capture.captureHeight * scale;
-                
-                // Ensure perfect bounds
-                if (destY + destHeight > canvas.height) {
-                    destHeight = canvas.height - destY;
-                    console.log(`Adjusted height for section ${i + 1} to fit canvas: ${destHeight / scale}px`);
-                }
-                
-                // Perfect pixel placement - no gaps, no overlaps
-                ctx.drawImage(
-                    img, // source image
-                    0, 0, img.width, img.height, // source rectangle (full image)
-                    0, destY, canvas.width, destHeight // destination rectangle
-                );
-                
-                console.log(`✓ Placed section ${i + 1}: Y=${destY / scale} to ${(destY + destHeight) / scale}, height=${destHeight / scale}px`);
-                
-            } catch (error) {
-                console.error(`Error processing section ${i + 1}:`, error);
-                throw new Error(`Failed to process capture section ${i + 1}: ${error.message}`);
+                return canvas.toDataURL(format, quality);
+            } catch (toDataURLError) {
+                console.error('Failed to convert canvas to data URL:', toDataURLError);
+                // Try with PNG as fallback
+                return canvas.toDataURL('image/png', 1.0);
             }
+              } catch (error) {
+            console.error('Stitching failed:', error);
+            throw new Error(`Image stitching failed: ${error.message}`);
         }
-        
-        // Final verification
-        var lastCapture = captures[captures.length - 1];
-        var actualCoverageEnd = lastCapture.scrollY + lastCapture.captureHeight;
-        var coveragePercent = (actualCoverageEnd / totalHeight) * 100;
-        
-        console.log('✓ ULTRA COMPLETE STITCH VERIFICATION:', {
-            totalPageHeight: totalHeight,
-            actualCoverageEnd: actualCoverageEnd,
-            coveragePercent: coveragePercent.toFixed(1) + '%',
-            isComplete: coveragePercent >= 99
-        });
-        
-        // Convert to final output format
-        var format = settings.outputFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
-        var quality = settings.outputFormat === 'jpeg' ? 0.95 : undefined;
-        
-        console.log('✓ ULTRA COMPLETE PAGE CAPTURE FINISHED - Converting to', format);
-        return canvas.toDataURL(format, quality);
     }
 
     async autoExpandContent() {
@@ -1078,12 +1206,20 @@ class CaptuneContent {
 
         // Return high-quality PNG
         return canvas.toDataURL('image/png', 1.0);
-    }
-
-    async captureFullPageSimple(settings) {
+    }    async captureFullPageSimple(settings) {
         console.log('Using simple full page capture method');
         
         try {
+            // Test background script communication first
+            try {
+                const pingResult = await chrome.runtime.sendMessage({ action: 'ping' });
+                if (!pingResult || !pingResult.success) {
+                    throw new Error('Background script not responding');
+                }
+            } catch (pingError) {
+                throw new Error(`Cannot communicate with background script: ${pingError.message}`);
+            }
+            
             // Get page dimensions
             const body = document.body;
             const html = document.documentElement;
@@ -1098,11 +1234,13 @@ class CaptuneContent {
             );
             
             console.log('Page dimensions:', { width: totalWidth, height: totalHeight });
-            
-            // Store original values
+              // Store original values
             const originalX = window.scrollX;
             const originalY = window.scrollY;
             const originalOverflow = document.documentElement.style.overflow;
+            
+            // Wait for page stability
+            await this.waitForPageStability(2000);
             
             // Scroll to top
             window.scrollTo(0, 0);
@@ -1123,16 +1261,16 @@ class CaptuneContent {
             document.documentElement.style.overflow = originalOverflow;
             window.scrollTo(originalX, originalY);
             
-            if (result.success) {
+            if (result && result.success) {
                 return { success: true, data: result.data };
             } else {
-                throw new Error('Simple capture failed');
+                throw new Error(`Simple capture failed: ${result?.error || 'Unknown error'}`);
             }
         } catch (error) {
             console.error('Simple capture error:', error);
             return { success: false, error: error.message };
         }
-    }    async expandDynamicContent() {
+    }async expandDynamicContent() {
         console.log('🔄 AGGRESSIVE dynamic content expansion for COMPLETE capture...');
         
         // Store original scroll position
@@ -1281,6 +1419,94 @@ class CaptuneContent {
         });
         
         return finalHeight;
+    }
+
+    // Utility method to wait for page to be stable
+    async waitForPageStability(timeout = 3000) {
+        console.log('Waiting for page stability...');
+        
+        const startTime = Date.now();
+        let lastHeight = document.body.scrollHeight;
+        let lastWidth = document.body.scrollWidth;
+        let stableCount = 0;
+        
+        while (Date.now() - startTime < timeout) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            const currentHeight = document.body.scrollHeight;
+            const currentWidth = document.body.scrollWidth;
+            
+            if (currentHeight === lastHeight && currentWidth === lastWidth) {
+                stableCount++;
+                if (stableCount >= 3) { // 3 consecutive stable checks
+                    console.log('Page is stable, proceeding with capture');
+                    return true;
+                }
+            } else {
+                stableCount = 0;
+                lastHeight = currentHeight;
+                lastWidth = currentWidth;
+                console.log('Page dimensions changed, waiting for stability...');
+            }
+        }
+        
+        console.log('Page stability timeout reached, proceeding anyway');
+        return false;
+    }
+
+    async waitForContent(timeout = 5000) {
+        const startTime = Date.now();
+        let lastHeight = document.body.scrollHeight;
+        
+        while (Date.now() - startTime < timeout) {
+            await new Promise(resolve => setTimeout(resolve, 300));
+            
+            // Check if new content has loaded
+            let currentHeight = document.body.scrollHeight;
+            if (currentHeight > lastHeight) {
+                console.log('New content detected, waiting for more to load...');
+                lastHeight = currentHeight;
+            } else {
+                // If no new content for a while, assume loading is complete
+                let stable = await this.waitForPageStability(1000);
+                if (stable) {
+                    console.log('Content loading appears to be stable now');
+                    return true;
+                }
+            }
+        }
+        
+        console.warn('Content loading wait timed out');
+        return false;
+    }
+
+    // Utility method for reliable background script communication
+    async reliableBackgroundMessage(message, maxRetries = 3) {
+        for (let attempt = 1; attempt <= maxRetries; attempt++) {
+            try {
+                console.log(`Background message attempt ${attempt}/${maxRetries}`);
+                
+                const result = await chrome.runtime.sendMessage(message);
+                
+                if (result) {
+                    return result;
+                }
+                
+                console.warn(`Attempt ${attempt}: Empty response from background script`);
+                
+            } catch (error) {
+                console.error(`Attempt ${attempt} failed:`, error);
+                
+                if (attempt === maxRetries) {
+                    throw new Error(`Background communication failed after ${maxRetries} attempts: ${error.message}`);
+                }
+                
+                // Wait before retry
+                await new Promise(resolve => setTimeout(resolve, 1000 * attempt));
+            }
+        }
+        
+        throw new Error('Background communication failed: No valid response received');
     }
 }
 
