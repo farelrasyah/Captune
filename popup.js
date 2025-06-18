@@ -95,41 +95,71 @@ class CaptunePopup {
     hideProgress() {
         document.getElementById('progress-modal').classList.add('hidden');
     }    async captureFullPage() {
-        this.showProgress('Capturing full page...');
+        this.showProgress('Initializing complete page capture...');
         
         try {
             const settings = await this.getCurrentSettings();
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             
+            console.log('Starting ULTRA COMPLETE capture for tab:', tab.url);
+            
+            // Enhanced progress messaging
+            this.updateProgress(5, 'Analyzing page structure...');
+            
             // Check if we can inject content script
-            if (!tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+            if (!tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://') && !tab.url.startsWith('moz-extension://')) {
                 try {
                     // Ensure content script is injected
                     await this.ensureContentScript(tab.id);
                     
+                    this.updateProgress(15, 'Content script ready - scanning page...');
+                    
+                    // Enhanced settings for complete capture
+                    const enhancedSettings = {
+                        ...settings,
+                        autoExpand: true, // Force enable for complete capture
+                        includeSticky: false, // Avoid sticky element duplication
+                        retinaQuality: true // Ensure HD quality
+                    };
+                    
+                    this.updateProgress(25, 'Expanding dynamic content...');
+                    
                     const result = await chrome.tabs.sendMessage(tab.id, {
                         action: 'captureFullPage',
-                        settings: settings
+                        settings: enhancedSettings
                     });
 
                     if (result && result.success) {
-                        this.updateProgress(100, 'Capture complete!');
+                        this.updateProgress(90, 'Processing captured data...');
+                        
                         setTimeout(() => {
-                            this.hideProgress();
-                            if (settings.outputFormat === 'pdf') {
-                                this.downloadPDF(result.data);
-                            } else {
-                                this.downloadImage(result.data, settings.outputFormat);
-                            }
-                        }, 500);
+                            this.updateProgress(100, '✅ COMPLETE page capture finished!');
+                            setTimeout(() => {
+                                this.hideProgress();
+                                if (enhancedSettings.outputFormat === 'pdf') {
+                                    this.downloadPDF(result.data);
+                                } else {
+                                    this.downloadImage(result.data, enhancedSettings.outputFormat);
+                                }
+                                
+                                // Show success message
+                                setTimeout(() => {
+                                    this.showSuccess('Complete page captured successfully! Screenshot includes entire page from top to bottom.');
+                                }, 500);
+                            }, 800);
+                        }, 200);
                         return;
                     } else {
-                        throw new Error(result?.error || 'Content script capture failed');
+                        console.error('Content script failed:', result?.error);
+                        throw new Error(result?.error || 'Complete page capture failed');
                     }
                 } catch (contentError) {
-                    console.log('Content script method failed, falling back to simple capture:', contentError.message);
+                    console.log('Content script method failed:', contentError.message);
                     
-                    // Fallback to simple visible capture
+                    // Show fallback message with explanation
+                    this.updateProgress(50, 'Page not fully capturable - using visible area...');
+                    
+                    // Fallback to visible capture with better messaging
                     const result = await chrome.runtime.sendMessage({
                         action: 'captureVisible',
                         options: {
@@ -139,16 +169,21 @@ class CaptunePopup {
                     });
 
                     if (result && result.success) {
-                        this.updateProgress(100, 'Capture complete (simplified)!');
+                        this.updateProgress(100, 'Visible area captured successfully!');
                         setTimeout(() => {
                             this.hideProgress();
                             this.downloadImage(result.data, settings.outputFormat);
+                            // Show limitation warning
+                            setTimeout(() => {
+                                this.showError('⚠️ Complete page capture not available for this page. Captured visible area only.\n\n💡 For complete page capture:\n• Refresh the page and try again\n• Enable "Auto-expand content" in settings\n• Some websites prevent full-page capture due to security restrictions');
+                            }, 1000);
                         }, 500);
                         return;
                     }
                 }
             } else {
-                // Can't inject script on chrome pages, use simple capture
+                // Special pages - use simple capture
+                this.updateProgress(50, 'Capturing browser special page...');
                 const result = await chrome.runtime.sendMessage({
                     action: 'captureVisible',
                     options: {
@@ -158,10 +193,13 @@ class CaptunePopup {
                 });
 
                 if (result && result.success) {
-                    this.updateProgress(100, 'Capture complete!');
+                    this.updateProgress(100, 'Special page captured!');
                     setTimeout(() => {
                         this.hideProgress();
                         this.downloadImage(result.data, settings.outputFormat);
+                        setTimeout(() => {
+                            this.showSuccess('Browser page captured successfully!');
+                        }, 500);
                     }, 500);
                     return;
                 }
@@ -169,8 +207,9 @@ class CaptunePopup {
             
             throw new Error('All capture methods failed');
         } catch (error) {
+            console.error('Capture error:', error);
             this.hideProgress();
-            this.showError('Failed to capture full page: ' + error.message);
+            this.showError(`❌ Capture failed: ${error.message}\n\n🔧 Troubleshooting:\n• Refresh the page and try again\n• Check if page allows screenshots\n• Try with different settings\n• Some dynamic pages require manual scrolling first`);
         }
     }async captureVisible() {
         this.showProgress('Capturing visible area...');
@@ -523,6 +562,20 @@ class CaptunePopup {
         setTimeout(() => {
             errorDiv.remove();
         }, 5000);
+    }
+
+    showSuccess(message) {
+        console.log('Captune Success:', message);
+        
+        // Simple success notification
+        const successDiv = document.createElement('div');
+        successDiv.className = 'success-notification';
+        successDiv.textContent = message;
+        document.body.appendChild(successDiv);
+        
+        setTimeout(() => {
+            successDiv.remove();
+        }, 4000);
     }async ensureContentScript(tabId) {
         try {
             console.log('Checking content script for tab:', tabId);

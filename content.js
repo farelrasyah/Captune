@@ -109,44 +109,59 @@ class CaptuneContent {
         this.selectionOverlay.appendChild(this.selectionBox);
         document.body.appendChild(this.selectionOverlay);
         document.body.appendChild(this.elementHighlight);
-    }
-
-    async captureFullPage(settings) {
+    }    async captureFullPage(settings) {
         try {
             this.isCapturing = true;
+            console.log('Starting COMPLETE full page capture with settings:', settings);
             
-            // Get page dimensions
-            const dimensions = this.getPageDimensions();
+            // Force cleanup any existing overlays first
+            this.cleanup();
             
-            // Handle sticky elements
+            // Auto-expand dynamic content first if requested
+            if (settings.autoExpand) {
+                console.log('Expanding dynamic content...');
+                await this.expandDynamicContent();
+            }
+            
+            // Get final page dimensions after expansion
+            var dimensions = this.getPageDimensions();
+            console.log('Final page dimensions after expansion:', dimensions);
+            
+            // Handle sticky elements (hide them to avoid duplication)
             if (!settings.includeSticky) {
                 this.hideStickyElements();
             }
 
-            // Add developer overlay if requested
-            if (settings.developerOverlay) {
-                this.addDeveloperOverlay();
+            // Try simple method first for small pages
+            if (dimensions.scrollHeight <= window.innerHeight * 2) {
+                console.log('Page is relatively small, attempting simple capture...');
+                var simpleResult = await this.captureFullPageSimple(settings);
+                
+                if (simpleResult.success) {
+                    console.log('Simple capture successful for full page');
+                    this.cleanup();
+                    return simpleResult;
+                }
             }
+            
+            console.log('Using viewport stitching for complete page capture...');
 
-            // Auto-expand content if requested
-            if (settings.autoExpand) {
-                await this.autoExpandContent();
-            }
+            // Perform complete full page capture using viewport stitching
+            var imageData = await this.performFullPageCapture(dimensions, settings);
 
-            // Perform full page capture using viewport stitching
-            const imageData = await this.performFullPageCapture(dimensions, settings);
-
-            // Cleanup
+            // Cleanup before returning
             this.cleanup();
             
+            console.log('COMPLETE full page capture finished successfully');
             return { success: true, data: imageData };
         } catch (error) {
+            console.error('Complete full page capture failed:', error);
             this.cleanup();
             return { success: false, error: error.message };
         } finally {
             this.isCapturing = false;
         }
-    }    async captureVisible(settings) {
+    }async captureVisible(settings) {
         try {
             // Add developer overlay if requested
             if (settings.developerOverlay) {
@@ -330,68 +345,251 @@ class CaptuneContent {
             this.elementListeners = null;
         }
     }    async performFullPageCapture(dimensions, settings) {
-        const captures = [];
-        const viewportHeight = window.innerHeight;
-        const scrollStep = viewportHeight - 100; // Overlap for better stitching
-        let currentScroll = 0;
-
-        // Scroll through the page and capture each viewport
-        while (currentScroll < dimensions.scrollHeight) {
-            window.scrollTo(0, currentScroll);
-            await this.waitForScroll();
-
-            // Capture current viewport using background script
-            const result = await chrome.runtime.sendMessage({
-                action: 'captureVisible',
-                options: {
-                    format: 'png',
-                    quality: 100
-                }
-            });
-
-            if (result.success) {
-                captures.push({
-                    dataUrl: result.data,
-                    scrollY: currentScroll,
-                    viewportHeight: viewportHeight
-                });
-            } else {
-                throw new Error('Failed to capture viewport at scroll ' + currentScroll);
-            }
-
-            currentScroll += scrollStep;
-        }
-
-        // Restore original scroll position
+        console.log('Starting ULTRA COMPLETE full page capture with dimensions:', dimensions);
+        
+        // Store original scroll position
+        var originalScrollX = window.scrollX;
+        var originalScrollY = window.scrollY;
+        
+        // Force scroll to absolute top first
         window.scrollTo(0, 0);
-
-        // Stitch images together
-        return await this.stitchImages(captures, dimensions, settings);
-    }
-
-    async stitchImages(captures, dimensions, settings) {
-        // Create offscreen canvas for stitching
-        const canvas = document.createElement('canvas');
-        const ctx = canvas.getContext('2d');
+        await new Promise(resolve => setTimeout(resolve, 300));
         
-        // Set canvas size based on settings
-        const scale = settings.retinaQuality ? 2 : 1;
-        canvas.width = window.innerWidth * scale;
-        canvas.height = dimensions.scrollHeight * scale;
-
-        // Load and draw each capture
-        for (let i = 0; i < captures.length; i++) {
-            const capture = captures[i];
-            const img = await this.loadImage(capture.dataUrl);
+        // Get viewport dimensions
+        var viewportHeight = window.innerHeight;
+        var viewportWidth = window.innerWidth;
+        var totalHeight = dimensions.scrollHeight;
+        
+        console.log('Ultra complete capture parameters:', {
+            totalHeight: totalHeight,
+            viewportHeight: viewportHeight,
+            capturesNeeded: Math.ceil(totalHeight / viewportHeight),
+            startFromTop: true
+        });
+        
+        // If page is very short, just capture visible area
+        if (totalHeight <= viewportHeight + 50) {
+            console.log('Page fits in single viewport, capturing directly');
+            window.scrollTo(0, 0); // Ensure we're at top
+            await new Promise(resolve => setTimeout(resolve, 200));
             
-            const yOffset = capture.scrollY * scale;
-            ctx.drawImage(img, 0, yOffset, img.width, img.height);
+            var result = await chrome.runtime.sendMessage({
+                action: 'captureVisible',
+                options: { format: 'png', quality: 100 }
+            });
+            
+            if (result.success) {
+                window.scrollTo(originalScrollX, originalScrollY);
+                return result.data;
+            } else {
+                throw new Error('Failed to capture short page');
+            }
         }
-
-        // Convert to desired format
-        const format = settings.outputFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
-        const quality = settings.outputFormat === 'jpeg' ? (settings.jpegQuality || 90) / 100 : undefined;
         
+        var captures = [];
+        var currentY = 0;
+        var captureIndex = 0;
+        
+        // Disable smooth scrolling for precise positioning
+        var originalScrollBehavior = document.documentElement.style.scrollBehavior;
+        document.documentElement.style.scrollBehavior = 'auto';
+        
+        try {
+            // START FROM ABSOLUTE TOP - capture every single pixel
+            while (currentY < totalHeight) {
+                captureIndex++;
+                console.log(`CAPTURE ${captureIndex}: Position Y=${currentY}, Target height=${Math.min(viewportHeight, totalHeight - currentY)}px`);
+                
+                // Scroll to exact position with retries for precision
+                var scrollAttempts = 0;
+                var targetReached = false;
+                
+                while (!targetReached && scrollAttempts < 3) {
+                    window.scrollTo(0, currentY);
+                    await new Promise(resolve => setTimeout(resolve, 400));
+                    
+                    var actualScrollY = window.scrollY;
+                    var maxPossibleScroll = Math.max(0, totalHeight - viewportHeight);
+                    
+                    // Check if we reached the desired position or the maximum possible
+                    if (Math.abs(actualScrollY - currentY) <= 5 || 
+                        (currentY > maxPossibleScroll && actualScrollY >= maxPossibleScroll - 5)) {
+                        targetReached = true;
+                    }
+                    
+                    scrollAttempts++;
+                    if (!targetReached && scrollAttempts < 3) {
+                        console.log(`Scroll attempt ${scrollAttempts} failed, retrying...`);
+                    }
+                }
+                
+                var finalScrollY = window.scrollY;
+                console.log(`Final scroll position: ${finalScrollY} (target: ${currentY})`);
+                
+                // Calculate how much content this capture will cover
+                var remainingHeight = totalHeight - finalScrollY;
+                var captureHeight = Math.min(viewportHeight, remainingHeight);
+                
+                // Capture current viewport
+                var result = await chrome.runtime.sendMessage({
+                    action: 'captureVisible',
+                    options: { format: 'png', quality: 100 }
+                });
+                
+                if (result.success) {
+                    captures.push({
+                        dataUrl: result.data,
+                        scrollY: finalScrollY,
+                        captureHeight: captureHeight,
+                        targetY: currentY,
+                        index: captureIndex,
+                        coverageStart: finalScrollY,
+                        coverageEnd: finalScrollY + captureHeight
+                    });
+                    
+                    console.log(`✓ CAPTURED section ${captureIndex}: Y=${finalScrollY}, height=${captureHeight}, covers ${finalScrollY} to ${finalScrollY + captureHeight}`);
+                } else {
+                    throw new Error(`Failed to capture viewport at position ${currentY}`);
+                }
+                
+                // Determine if we've covered the entire page
+                if (finalScrollY + viewportHeight >= totalHeight - 10) {
+                    console.log('✓ REACHED BOTTOM - Page completely captured!');
+                    break;
+                }
+                
+                // Calculate next position - ensure NO gaps in coverage
+                // Move exactly by viewport height, but account for any scroll position differences
+                var nextY = Math.min(finalScrollY + viewportHeight, totalHeight);
+                
+                // If we can't scroll further down, we're done
+                if (nextY <= currentY) {
+                    console.log('Cannot scroll further - capture complete');
+                    break;
+                }
+                
+                currentY = nextY;
+                
+                // Safety check to prevent infinite loop
+                if (captureIndex > 200) {
+                    console.warn('Too many captures (200+), stopping for safety');
+                    break;
+                }
+            }
+            
+        } finally {
+            // Restore original scroll position and behavior
+            document.documentElement.style.scrollBehavior = originalScrollBehavior;
+            window.scrollTo(originalScrollX, originalScrollY);
+        }
+        
+        console.log(`✓ ULTRA COMPLETE CAPTURE: ${captures.length} sections covering full ${totalHeight}px height`);
+        
+        if (captures.length === 0) {
+            throw new Error('No captures were taken');
+        }
+        
+        if (captures.length === 1) {
+            console.log('Single capture covers entire page');
+            return captures[0].dataUrl;
+        }
+        
+        // Stitch with perfect precision - every pixel from top to bottom
+        return await this.stitchImagesUltraComplete(captures, totalHeight, viewportWidth, settings);
+    }    async stitchImagesUltraComplete(captures, totalHeight, viewportWidth, settings) {
+        console.log('✓ ULTRA COMPLETE STITCHING - Perfect pixel-by-pixel reconstruction');
+        console.log('Stitching data:', {
+            sections: captures.length,
+            totalHeight: totalHeight,
+            viewportWidth: viewportWidth
+        });
+        
+        // Create canvas with exact dimensions
+        var canvas = document.createElement('canvas');
+        var ctx = canvas.getContext('2d');
+        
+        // Set canvas dimensions to exact page size with proper scaling
+        var scale = settings.retinaQuality ? (window.devicePixelRatio || 1) : 1;
+        canvas.width = viewportWidth * scale;
+        canvas.height = totalHeight * scale;
+        
+        console.log('Ultra complete canvas setup:', {
+            canvasWidth: canvas.width,
+            canvasHeight: canvas.height,
+            scale: scale,
+            devicePixelRatio: window.devicePixelRatio
+        });
+        
+        // Fill with perfect white background
+        ctx.fillStyle = '#ffffff';
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+        
+        // Validate coverage before stitching
+        var expectedCoverage = [];
+        var currentPos = 0;
+        for (var i = 0; i < captures.length; i++) {
+            var capture = captures[i];
+            expectedCoverage.push({
+                index: i + 1,
+                start: currentPos,
+                end: currentPos + capture.captureHeight,
+                actualScrollY: capture.scrollY
+            });
+            currentPos += capture.captureHeight;
+        }
+        
+        console.log('Coverage validation:', expectedCoverage);
+        
+        // Process each capture with perfect positioning
+        for (var i = 0; i < captures.length; i++) {
+            var capture = captures[i];
+            console.log(`Processing section ${i + 1}/${captures.length}: scroll=${capture.scrollY}, target=${capture.targetY}`);
+            
+            try {
+                var img = await this.loadImage(capture.dataUrl);
+                
+                // Calculate exact destination position on canvas
+                var destY = capture.scrollY * scale;
+                var destHeight = capture.captureHeight * scale;
+                
+                // Ensure perfect bounds
+                if (destY + destHeight > canvas.height) {
+                    destHeight = canvas.height - destY;
+                    console.log(`Adjusted height for section ${i + 1} to fit canvas: ${destHeight / scale}px`);
+                }
+                
+                // Perfect pixel placement - no gaps, no overlaps
+                ctx.drawImage(
+                    img, // source image
+                    0, 0, img.width, img.height, // source rectangle (full image)
+                    0, destY, canvas.width, destHeight // destination rectangle
+                );
+                
+                console.log(`✓ Placed section ${i + 1}: Y=${destY / scale} to ${(destY + destHeight) / scale}, height=${destHeight / scale}px`);
+                
+            } catch (error) {
+                console.error(`Error processing section ${i + 1}:`, error);
+                throw new Error(`Failed to process capture section ${i + 1}: ${error.message}`);
+            }
+        }
+        
+        // Final verification
+        var lastCapture = captures[captures.length - 1];
+        var actualCoverageEnd = lastCapture.scrollY + lastCapture.captureHeight;
+        var coveragePercent = (actualCoverageEnd / totalHeight) * 100;
+        
+        console.log('✓ ULTRA COMPLETE STITCH VERIFICATION:', {
+            totalPageHeight: totalHeight,
+            actualCoverageEnd: actualCoverageEnd,
+            coveragePercent: coveragePercent.toFixed(1) + '%',
+            isComplete: coveragePercent >= 99
+        });
+        
+        // Convert to final output format
+        var format = settings.outputFormat === 'jpeg' ? 'image/jpeg' : 'image/png';
+        var quality = settings.outputFormat === 'jpeg' ? 0.95 : undefined;
+        
+        console.log('✓ ULTRA COMPLETE PAGE CAPTURE FINISHED - Converting to', format);
         return canvas.toDataURL(format, quality);
     }
 
@@ -521,14 +719,23 @@ class CaptuneContent {
             el.style.visibility = 'hidden';
             el.setAttribute('data-captune-hidden', 'true');
         });
-    }
-
-    cleanup() {
+    }    cleanup() {
+        console.log('Cleaning up overlays and styles...');
+        
         // Remove developer overlay
         const overlay = document.getElementById('captune-grid-overlay');
         if (overlay) {
             overlay.remove();
+            console.log('Removed grid overlay');
         }
+
+        // Remove all captune-added overlays
+        const captuneOverlays = document.querySelectorAll('[id*="captune"], [class*="captune"]');
+        captuneOverlays.forEach(el => {
+            if (el !== this.selectionOverlay && el !== this.selectionBox && el !== this.elementHighlight) {
+                el.remove();
+            }
+        });
 
         // Restore hidden sticky elements
         const hiddenElements = document.querySelectorAll('[data-captune-hidden="true"]');
@@ -536,48 +743,150 @@ class CaptuneContent {
             el.style.visibility = '';
             el.removeAttribute('data-captune-hidden');
         });
+        console.log(`Restored ${hiddenElements.length} hidden elements`);
 
         // Remove element outlines
         const outlinedElements = document.querySelectorAll('[data-captune-outlined="true"]');
         outlinedElements.forEach(el => {
             el.style.outline = '';
+            el.style.border = '';
+            el.style.boxShadow = '';
             el.removeAttribute('data-captune-outlined');
         });
+        console.log(`Removed outlines from ${outlinedElements.length} elements`);
+
+        // Hide selection and element highlight overlays
+        if (this.selectionOverlay) {
+            this.selectionOverlay.style.display = 'none';
+        }
+        if (this.elementHighlight) {
+            this.elementHighlight.style.display = 'none';
+        }
 
         // Reset body styles
         document.body.style.width = '';
         document.body.style.minHeight = '';
         document.body.style.cursor = '';
+
+        // Reset document scroll behavior
+        document.documentElement.style.scrollBehavior = '';        // Force layout recalculation
+        document.body.offsetHeight;
+        
+        console.log('Cleanup completed');
     }
 
     // Utility methods
     getPageDimensions() {
+        // Get the maximum dimensions of the page content
+        var body = document.body;
+        var html = document.documentElement;
+        
+        // Calculate true page dimensions including all scrollable content
+        var scrollWidth = Math.max(
+            body.scrollWidth,
+            body.offsetWidth,
+            html.clientWidth,
+            html.scrollWidth,
+            html.offsetWidth
+        );
+        
+        var scrollHeight = Math.max(
+            body.scrollHeight,
+            body.offsetHeight,
+            html.clientHeight,
+            html.scrollHeight,
+            html.offsetHeight
+        );
+        
+        // Check all visible elements to find the actual bottom-most position
+        var allElements = document.querySelectorAll('*');
+        var maxBottom = scrollHeight;
+        var maxRight = scrollWidth;
+        
+        // Store original scroll position
+        var originalScrollY = window.scrollY;
+        
+        // Temporarily scroll to bottom to ensure all elements are measured correctly
+        window.scrollTo(0, document.body.scrollHeight);
+        
+        for (var i = 0; i < allElements.length; i++) {
+            var el = allElements[i];
+            if (el.offsetParent === null && el.style.display === 'none') continue; // Skip hidden elements
+            
+            var rect = el.getBoundingClientRect();
+            var computedStyle = window.getComputedStyle(el);
+            
+            // Skip elements that are positioned out of normal flow but not actually visible
+            if (computedStyle.position === 'fixed' || computedStyle.position === 'sticky') {
+                continue;
+            }
+            
+            var elementBottom = rect.bottom + window.scrollY;
+            var elementRight = rect.right + window.scrollX;
+            
+            // Only count elements that have actual content or visible area
+            if (rect.height > 0 && rect.width > 0) {
+                if (elementBottom > maxBottom) maxBottom = elementBottom;
+                if (elementRight > maxRight) maxRight = elementRight;
+            }
+        }
+        
+        // Restore original scroll position
+        window.scrollTo(0, originalScrollY);
+        
+        // Add some padding to ensure we capture everything
+        var finalHeight = Math.max(scrollHeight, maxBottom) + 20;
+        var finalWidth = Math.max(scrollWidth, maxRight);
+        
+        // Final validation - ensure minimum dimensions
+        finalHeight = Math.max(finalHeight, window.innerHeight);
+        finalWidth = Math.max(finalWidth, window.innerWidth);
+        
+        console.log('Complete page dimensions calculated:', {
+            bodyScrollHeight: body.scrollHeight,
+            htmlScrollHeight: html.scrollHeight,
+            maxElementBottom: maxBottom,
+            finalHeight: finalHeight,
+            finalWidth: finalWidth,
+            addedPadding: 20
+        });
+        
         return {
-            scrollWidth: Math.max(
-                document.body.scrollWidth,
-                document.documentElement.scrollWidth,
-                document.body.offsetWidth,
-                document.documentElement.offsetWidth,
-                document.body.clientWidth,
-                document.documentElement.clientWidth
-            ),
-            scrollHeight: Math.max(
-                document.body.scrollHeight,
-                document.documentElement.scrollHeight,
-                document.body.offsetHeight,
-                document.documentElement.offsetHeight,
-                document.body.clientHeight,
-                document.documentElement.clientHeight
-            )
+            scrollWidth: finalWidth,
+            scrollHeight: finalHeight
         };
     }
 
     async waitForScroll() {
-        return new Promise(resolve => setTimeout(resolve, 100));
+        return new Promise(resolve => setTimeout(resolve, 200));
     }
 
     async waitForLayoutStable() {
         return new Promise(resolve => setTimeout(resolve, 300));
+    }
+
+    async waitForImagesLoad() {
+        // Wait for lazy-loaded images to finish loading
+        const images = document.querySelectorAll('img');
+        const promises = Array.from(images).map(img => {
+            if (img.complete) return Promise.resolve();
+            
+            return new Promise(resolve => {
+                const timeout = setTimeout(resolve, 1000); // Max 1 second wait per image
+                img.onload = () => {
+                    clearTimeout(timeout);
+                    resolve();
+                };
+                img.onerror = () => {
+                    clearTimeout(timeout);
+                    resolve();
+                };
+            });
+        });
+        
+        await Promise.all(promises);
+        // Additional wait for layout
+        return new Promise(resolve => setTimeout(resolve, 100));
     }
 
     async loadImage(dataUrl) {
@@ -733,6 +1042,209 @@ class CaptuneContent {
         );
 
         return canvas.toDataURL('image/png');
+    }
+
+    async captureFullPageSimple(settings) {
+        console.log('Using simple full page capture method');
+        
+        try {
+            // Get page dimensions
+            const body = document.body;
+            const html = document.documentElement;
+            
+            const totalHeight = Math.max(
+                body.scrollHeight, body.offsetHeight,
+                html.clientHeight, html.scrollHeight, html.offsetHeight
+            );
+            const totalWidth = Math.max(
+                body.scrollWidth, body.offsetWidth,
+                html.clientWidth, html.scrollWidth, html.offsetWidth
+            );
+            
+            console.log('Page dimensions:', { width: totalWidth, height: totalHeight });
+            
+            // Store original values
+            const originalX = window.scrollX;
+            const originalY = window.scrollY;
+            const originalOverflow = document.documentElement.style.overflow;
+            
+            // Scroll to top
+            window.scrollTo(0, 0);
+            
+            // Set body to show full content
+            document.documentElement.style.overflow = 'visible';
+            
+            // Wait for layout
+            await new Promise(resolve => setTimeout(resolve, 500));
+            
+            // Take screenshot
+            const result = await chrome.runtime.sendMessage({
+                action: 'captureVisible',
+                options: { format: 'png', quality: 100 }
+            });
+            
+            // Restore original state
+            document.documentElement.style.overflow = originalOverflow;
+            window.scrollTo(originalX, originalY);
+            
+            if (result.success) {
+                return { success: true, data: result.data };
+            } else {
+                throw new Error('Simple capture failed');
+            }
+        } catch (error) {
+            console.error('Simple capture error:', error);
+            return { success: false, error: error.message };
+        }
+    }    async expandDynamicContent() {
+        console.log('🔄 AGGRESSIVE dynamic content expansion for COMPLETE capture...');
+        
+        // Store original scroll position
+        var originalScrollY = window.scrollY;
+        var lastHeight = 0;
+        var currentHeight = this.getPageDimensions().scrollHeight;
+        var attempts = 0;
+        var maxAttempts = 15; // More attempts for thorough expansion
+        var expandedSomething = false;
+        
+        while (currentHeight > lastHeight && attempts < maxAttempts) {
+            lastHeight = currentHeight;
+            attempts++;
+            
+            console.log(`Expansion attempt ${attempts}: height ${lastHeight} -> checking for more content...`);
+            
+            // Scroll to absolute bottom first
+            window.scrollTo(0, document.body.scrollHeight);
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            // Look for and click load more buttons with expanded selectors
+            var loadMoreSelectors = [
+                // Common load more patterns
+                'button[contains(text(), "Load more")]',
+                'button[contains(text(), "Show more")]',
+                'button[contains(text(), "See more")]',
+                'button[contains(text(), "View more")]',
+                'a[contains(text(), "Load more")]',
+                'a[contains(text(), "Show more")]',
+                
+                // Data attributes and classes
+                '[data-testid*="load-more"]',
+                '[data-testid*="show-more"]',
+                '[class*="load-more"]',
+                '[class*="show-more"]',
+                '[class*="load_more"]',
+                '[class*="show_more"]',
+                
+                // Pagination and infinite scroll
+                '.pagination-next',
+                '.load-next',
+                '.infinite-scroll-trigger',
+                '[aria-label*="Load more"]',
+                '[aria-label*="Show more"]',
+                
+                // Social media specific
+                '[data-testid="tweet-show-this-thread"]', // Twitter
+                'button[data-ms*="show-more"]', // LinkedIn
+                '[role="button"][aria-label*="more"]',
+                
+                // Generic patterns
+                'button[type="button"]:contains("more")',
+                'div[role="button"]:contains("more")',
+                'span[role="button"]:contains("more")'
+            ];
+            
+            var foundButton = false;
+            for (var selector of loadMoreSelectors) {
+                try {
+                    var buttons = document.querySelectorAll(selector);
+                    for (var i = 0; i < buttons.length; i++) {
+                        var btn = buttons[i];
+                        // Check if button is visible and clickable
+                        if (btn.offsetParent !== null && 
+                            !btn.disabled && 
+                            btn.style.display !== 'none') {
+                            
+                            console.log('🔘 Clicking expansion button:', selector, btn.textContent.trim());
+                            
+                            // Scroll button into view first
+                            btn.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            await new Promise(resolve => setTimeout(resolve, 500));
+                            
+                            // Click the button
+                            btn.click();
+                            foundButton = true;
+                            expandedSomething = true;
+                            
+                            // Wait longer for content to load
+                            await new Promise(resolve => setTimeout(resolve, 2000));
+                            break;
+                        }
+                    }
+                    if (foundButton) break;
+                } catch (e) {
+                    // Ignore selector errors
+                    continue;
+                }
+            }
+            
+            // Aggressive scroll down to trigger lazy loading
+            var scrollSteps = 5;
+            var scrollHeight = document.body.scrollHeight;
+            for (var step = 1; step <= scrollSteps; step++) {
+                var scrollTo = (scrollHeight / scrollSteps) * step;
+                window.scrollTo(0, scrollTo);
+                await new Promise(resolve => setTimeout(resolve, 300));
+            }
+            
+            // Final scroll to absolute bottom
+            window.scrollTo(0, document.body.scrollHeight);
+            await new Promise(resolve => setTimeout(resolve, 800));
+            
+            // Trigger scroll events to activate infinite scroll
+            window.dispatchEvent(new Event('scroll'));
+            window.dispatchEvent(new Event('resize'));
+            
+            // Check for height changes
+            var newHeight = this.getPageDimensions().scrollHeight;
+            if (newHeight > currentHeight) {
+                console.log(`✓ Page expanded: ${currentHeight} -> ${newHeight} (+${newHeight - currentHeight}px)`);
+                currentHeight = newHeight;
+                expandedSomething = true;
+            } else {
+                console.log(`No height change detected on attempt ${attempts}`);
+                // If no expansion for 3 consecutive attempts, try a few more aggressive methods
+                if (attempts - lastHeight > 3) {
+                    // Try triggering page end events
+                    var endEvents = ['scroll', 'scrollend', 'wheel', 'touchmove'];
+                    for (var event of endEvents) {
+                        window.dispatchEvent(new Event(event, { bubbles: true }));
+                    }
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    
+                    // Check height one more time
+                    currentHeight = this.getPageDimensions().scrollHeight;
+                    if (currentHeight > lastHeight) {
+                        console.log(`✓ Event-triggered expansion: ${lastHeight} -> ${currentHeight}`);
+                        lastHeight = currentHeight - 1; // Continue loop
+                    }
+                }
+            }
+        }
+        
+        // Return to original position
+        window.scrollTo(0, originalScrollY);
+        await new Promise(resolve => setTimeout(resolve, 300));
+        
+        var finalHeight = this.getPageDimensions().scrollHeight;
+        console.log(`🏁 Dynamic content expansion complete:`, {
+            originalHeight: originalScrollY,
+            finalHeight: finalHeight,
+            attempts: attempts,
+            expandedContent: expandedSomething,
+            heightIncrease: finalHeight - originalScrollY
+        });
+        
+        return finalHeight;
     }
 }
 

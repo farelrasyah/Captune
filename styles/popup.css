@@ -344,6 +344,22 @@ section h2::before {
     animation: slideDown 0.3s ease;
 }
 
+/* Success notification */
+.success-notification {
+    position: fixed;
+    top: 10px;
+    left: 10px;
+    right: 10px;
+    background: #27ae60;
+    color: white;
+    padding: 10px;
+    border-radius: 4px;
+    font-size: 12px;
+    z-index: 10000;
+    animation: slideDown 0.3s ease;
+    box-shadow: 0 2px 8px rgba(39, 174, 96, 0.3);
+}
+
 @keyframes slideDown {
     from {
         transform: translateY(-100%);
