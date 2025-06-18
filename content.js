@@ -303,18 +303,28 @@ class CaptuneContent {
                 this.selectionBox.style.width = width + 'px';
                 this.selectionBox.style.height = height + 'px';
             }
-        };
-
-        const onMouseUp = async (e) => {
+        };        const onMouseUp = async (e) => {
             if (isSelecting) {
                 isSelecting = false;
                 
-                // Get selection bounds
+                // Get selection bounds from the selection box
                 const rect = this.selectionBox.getBoundingClientRect();
-                
-                if (rect.width > 10 && rect.height > 10) {
+                  if (rect.width > 10 && rect.height > 10) {
+                    // Create proper coordinates for capture
+                    // getBoundingClientRect() gives coordinates relative to viewport
+                    const selectionRect = {
+                        left: rect.left,
+                        top: rect.top,
+                        width: rect.width,
+                        height: rect.height
+                    };
+                    
+                    console.log('Selection coordinates:', selectionRect);
+                    console.log('Window scroll:', { x: window.scrollX, y: window.scrollY });
+                    console.log('Device pixel ratio:', window.devicePixelRatio);
+                    
                     // Capture selected area
-                    await this.captureSelection(rect);
+                    await this.captureSelection(selectionRect);
                 }
                 
                 this.endSelectionMode();
@@ -1057,6 +1067,8 @@ class CaptuneContent {
         await this.waitForScroll();
     }    async captureSelection(rect) {
         try {
+            console.log('Starting selection capture with rect:', rect);
+            
             // Hide overlay elements to ensure clean capture
             const overlayDisplay = this.selectionOverlay.style.display;
             const boxDisplay = this.selectionBox.style.display;
@@ -1065,7 +1077,7 @@ class CaptuneContent {
             this.selectionBox.style.display = 'none';
             
             // Wait a moment for the UI to update
-            await new Promise(resolve => setTimeout(resolve, 50));
+            await new Promise(resolve => setTimeout(resolve, 100));
             
             // Capture visible area
             const result = await chrome.runtime.sendMessage({
@@ -1077,8 +1089,50 @@ class CaptuneContent {
             });
 
             if (result.success) {
-                // Crop to selection
-                const croppedImage = await this.cropImage(result.data, rect);
+                // Load the captured image to get its actual dimensions
+                const tempImg = await this.loadImage(result.data);
+                const capturedWidth = tempImg.width;
+                const capturedHeight = tempImg.height;
+                
+                console.log('Captured image size:', capturedWidth, 'x', capturedHeight);
+                console.log('Viewport size:', window.innerWidth, 'x', window.innerHeight);
+                
+                // Calculate the scaling factor between captured image and viewport
+                const scaleX = capturedWidth / window.innerWidth;
+                const scaleY = capturedHeight / window.innerHeight;
+                
+                console.log('Scale factors:', { scaleX, scaleY });
+                
+                // Apply scaling to selection coordinates
+                const scaledRect = {
+                    left: rect.left * scaleX,
+                    top: rect.top * scaleY,
+                    width: rect.width * scaleX,
+                    height: rect.height * scaleY
+                };
+                
+                console.log('Scaled rect:', scaledRect);
+                
+                // Ensure coordinates are within bounds
+                const boundedRect = {
+                    left: Math.max(0, Math.round(scaledRect.left)),
+                    top: Math.max(0, Math.round(scaledRect.top)),
+                    width: Math.round(scaledRect.width),
+                    height: Math.round(scaledRect.height)
+                };
+                
+                // Ensure we don't exceed image boundaries
+                if (boundedRect.left + boundedRect.width > capturedWidth) {
+                    boundedRect.width = capturedWidth - boundedRect.left;
+                }
+                if (boundedRect.top + boundedRect.height > capturedHeight) {
+                    boundedRect.height = capturedHeight - boundedRect.top;
+                }
+                
+                console.log('Final bounded rect:', boundedRect);
+                
+                // Crop to selection with calculated coordinates
+                const croppedImage = await this.cropImage(result.data, boundedRect, false);
                 
                 // Download the cropped image
                 const settings = await chrome.storage.sync.get({
@@ -1090,6 +1144,8 @@ class CaptuneContent {
                     data: croppedImage,
                     filename: `captune-selection-${Date.now()}.${settings.outputFormat}`
                 });
+                
+                console.log('Selection capture completed successfully');
             }
             
             // Restore overlay visibility (though selection mode will end anyway)
@@ -1102,7 +1158,7 @@ class CaptuneContent {
             this.selectionOverlay.style.display = 'block';
             this.selectionBox.style.display = 'block';
         }
-    }    async captureClickedElement(element) {
+    }async captureClickedElement(element) {
         try {
             // Get element bounds with scroll offset
             const rect = element.getBoundingClientRect();
@@ -1181,14 +1237,19 @@ class CaptuneContent {
         } catch (error) {
             return { success: false, error: error.message };
         }
-    }    async cropImage(imageData, rect) {
+    }    async cropImage(imageData, rect, isSelection = false) {
         const canvas = document.createElement('canvas');
         const ctx = canvas.getContext('2d');
         const img = await this.loadImage(imageData);
 
-        // Set canvas size to match the selection
-        canvas.width = Math.round(rect.width);
-        canvas.height = Math.round(rect.height);
+        console.log('Cropping image - Image size:', img.width, 'x', img.height);
+        console.log('Cropping image - Crop rect:', rect);
+        
+        // Set canvas size to match the cropped area
+        canvas.width = rect.width;
+        canvas.height = rect.height;
+
+        console.log('Canvas output size:', canvas.width, 'x', canvas.height);
 
         // Enable high-quality image rendering
         ctx.imageSmoothingEnabled = true;
@@ -1200,13 +1261,13 @@ class CaptuneContent {
         // Draw the cropped portion of the image
         ctx.drawImage(
             img,
-            Math.round(rect.left), Math.round(rect.top), Math.round(rect.width), Math.round(rect.height),
-            0, 0, Math.round(rect.width), Math.round(rect.height)
+            rect.left, rect.top, rect.width, rect.height,
+            0, 0, canvas.width, canvas.height
         );
 
         // Return high-quality PNG
         return canvas.toDataURL('image/png', 1.0);
-    }    async captureFullPageSimple(settings) {
+    }async captureFullPageSimple(settings) {
         console.log('Using simple full page capture method');
         
         try {
