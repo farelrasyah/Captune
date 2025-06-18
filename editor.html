@@ -1,0 +1,293 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Captune Editor</title>
+    <link rel="stylesheet" href="styles/editor.css">
+</head>
+<body>
+    <div class="editor-container">
+        <!-- Header Toolbar -->
+        <header class="editor-header">
+            <div class="logo-section">
+                <img src="icons/icon32.png" alt="Captune" class="logo">
+                <h1>Captune Editor</h1>
+            </div>
+            
+            <div class="toolbar">
+                <div class="tool-group">
+                    <button id="tool-select" class="tool-btn active" title="Select (V)">
+                        <span class="icon">🔲</span>
+                    </button>
+                    <button id="tool-text" class="tool-btn" title="Text (T)">
+                        <span class="icon">📝</span>
+                    </button>
+                    <button id="tool-arrow" class="tool-btn" title="Arrow (A)">
+                        <span class="icon">↗️</span>
+                    </button>
+                    <button id="tool-rectangle" class="tool-btn" title="Rectangle (R)">
+                        <span class="icon">▭</span>
+                    </button>
+                    <button id="tool-circle" class="tool-btn" title="Circle (C)">
+                        <span class="icon">⭕</span>
+                    </button>
+                    <button id="tool-line" class="tool-btn" title="Line (L)">
+                        <span class="icon">📏</span>
+                    </button>
+                    <button id="tool-pen" class="tool-btn" title="Pen (P)">
+                        <span class="icon">✏️</span>
+                    </button>
+                    <button id="tool-highlight" class="tool-btn" title="Highlight (H)">
+                        <span class="icon">🖍️</span>
+                    </button>
+                    <button id="tool-blur" class="tool-btn" title="Blur (B)">
+                        <span class="icon">🌫️</span>
+                    </button>
+                </div>
+
+                <div class="separator"></div>
+
+                <div class="action-group">
+                    <button id="undo-btn" class="action-btn" title="Undo (Ctrl+Z)">
+                        <span class="icon">↶</span>
+                    </button>
+                    <button id="redo-btn" class="action-btn" title="Redo (Ctrl+Y)">
+                        <span class="icon">↷</span>
+                    </button>
+                </div>
+
+                <div class="separator"></div>
+
+                <div class="file-group">
+                    <button id="load-image" class="file-btn" title="Load Image">
+                        <span class="icon">📁</span>
+                        <span>Load</span>
+                    </button>
+                    <button id="save-project" class="file-btn" title="Save Project">
+                        <span class="icon">💾</span>
+                        <span>Save</span>
+                    </button>
+                    <button id="export-image" class="file-btn export" title="Export Image">
+                        <span class="icon">📤</span>
+                        <span>Export</span>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <!-- Properties Panel -->
+        <aside class="properties-panel">
+            <div class="panel-section">
+                <h3>Tool Properties</h3>
+                
+                <!-- Color Picker -->
+                <div class="property-group">
+                    <label>Color:</label>
+                    <div class="color-picker">
+                        <input type="color" id="stroke-color" value="#ff0000">
+                        <div class="color-presets">
+                            <button class="color-preset" style="background: #ff0000" data-color="#ff0000"></button>
+                            <button class="color-preset" style="background: #00ff00" data-color="#00ff00"></button>
+                            <button class="color-preset" style="background: #0000ff" data-color="#0000ff"></button>
+                            <button class="color-preset" style="background: #ffff00" data-color="#ffff00"></button>
+                            <button class="color-preset" style="background: #ff00ff" data-color="#ff00ff"></button>
+                            <button class="color-preset" style="background: #00ffff" data-color="#00ffff"></button>
+                            <button class="color-preset" style="background: #000000" data-color="#000000"></button>
+                            <button class="color-preset" style="background: #ffffff; border: 1px solid #ccc" data-color="#ffffff"></button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Fill Color -->
+                <div class="property-group">
+                    <label>Fill:</label>
+                    <div class="fill-controls">
+                        <input type="checkbox" id="has-fill">
+                        <input type="color" id="fill-color" value="#ffffff" disabled>
+                        <input type="range" id="fill-opacity" min="0" max="100" value="50" disabled>
+                    </div>
+                </div>
+
+                <!-- Stroke Width -->
+                <div class="property-group">
+                    <label>Stroke Width:</label>
+                    <input type="range" id="stroke-width" min="1" max="20" value="2">
+                    <span id="stroke-width-value">2px</span>
+                </div>
+
+                <!-- Font Settings (for text) -->
+                <div class="property-group text-properties" style="display: none;">
+                    <label>Font Family:</label>
+                    <select id="font-family">
+                        <option value="Arial">Arial</option>
+                        <option value="Helvetica">Helvetica</option>
+                        <option value="Times New Roman">Times New Roman</option>
+                        <option value="Courier New">Courier New</option>
+                        <option value="Verdana">Verdana</option>
+                    </select>
+                    
+                    <label>Font Size:</label>
+                    <input type="range" id="font-size" min="8" max="72" value="16">
+                    <span id="font-size-value">16px</span>
+                    
+                    <div class="font-style">
+                        <button id="font-bold" class="style-btn">B</button>
+                        <button id="font-italic" class="style-btn">I</button>
+                        <button id="font-underline" class="style-btn">U</button>
+                    </div>
+                </div>
+
+                <!-- Blur Settings -->
+                <div class="property-group blur-properties" style="display: none;">
+                    <label>Blur Radius:</label>
+                    <input type="range" id="blur-radius" min="1" max="20" value="5">
+                    <span id="blur-radius-value">5px</span>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>Layers</h3>
+                <div class="layers-list" id="layers-list">
+                    <!-- Layers will be populated dynamically -->
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <h3>Export Options</h3>
+                <div class="export-options">
+                    <label>Format:</label>
+                    <select id="export-format">
+                        <option value="png">PNG</option>
+                        <option value="jpeg">JPEG</option>
+                        <option value="webp">WebP</option>
+                        <option value="svg">SVG</option>
+                    </select>
+                    
+                    <label>Quality:</label>
+                    <input type="range" id="export-quality" min="10" max="100" value="90">
+                    <span id="export-quality-value">90%</span>
+                    
+                    <label>Scale:</label>
+                    <select id="export-scale">
+                        <option value="1">1x (Original)</option>
+                        <option value="2">2x (Retina)</option>
+                        <option value="3">3x (High DPI)</option>
+                        <option value="0.5">0.5x (Half)</option>
+                    </select>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Canvas Area -->
+        <main class="canvas-area">
+            <div class="canvas-container" id="canvas-container">
+                <canvas id="main-canvas"></canvas>
+                <canvas id="overlay-canvas"></canvas>
+                
+                <!-- Text Input Overlay -->
+                <div id="text-input-overlay" class="text-input-overlay" style="display: none;">
+                    <textarea id="text-input" placeholder="Enter text..."></textarea>
+                    <div class="text-controls">
+                        <button id="text-confirm">✓</button>
+                        <button id="text-cancel">✗</button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Canvas Controls -->
+            <div class="canvas-controls">
+                <div class="zoom-controls">
+                    <button id="zoom-out">-</button>
+                    <span id="zoom-level">100%</span>
+                    <button id="zoom-in">+</button>
+                    <button id="zoom-fit">Fit</button>
+                </div>
+                
+                <div class="canvas-info">
+                    <span id="canvas-size">0 × 0</span>
+                    <span id="mouse-position">0, 0</span>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals -->
+    <div id="load-image-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Load Image</h2>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="load-options">
+                    <div class="load-option">
+                        <input type="file" id="file-input" accept="image/*" style="display: none;">
+                        <button id="browse-file" class="load-btn">
+                            <span class="icon">📁</span>
+                            <span>Browse Files</span>
+                        </button>
+                        <p>Load image from your computer</p>
+                    </div>
+                    
+                    <div class="load-option">
+                        <button id="load-from-capture" class="load-btn">
+                            <span class="icon">📷</span>
+                            <span>Capture New Screenshot</span>
+                        </button>
+                        <p>Take a new screenshot to edit</p>
+                    </div>
+                    
+                    <div class="load-option">
+                        <button id="load-from-clipboard" class="load-btn">
+                            <span class="icon">📋</span>
+                            <span>Paste from Clipboard</span>
+                        </button>
+                        <p>Paste image from clipboard</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div id="export-modal" class="modal" style="display: none;">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Export Image</h2>
+                <button class="modal-close">×</button>
+            </div>
+            <div class="modal-body">
+                <div class="export-preview">
+                    <canvas id="export-preview-canvas"></canvas>
+                </div>
+                <div class="export-settings">
+                    <div class="setting-group">
+                        <label>Filename:</label>
+                        <input type="text" id="export-filename" value="captune-edited">
+                    </div>
+                    <div class="setting-group">
+                        <label>Include Background:</label>
+                        <input type="checkbox" id="include-background" checked>
+                    </div>
+                    <div class="setting-group">
+                        <label>Add Watermark:</label>
+                        <input type="checkbox" id="add-watermark">
+                    </div>
+                </div>
+                <div class="export-actions">
+                    <button id="export-download" class="export-btn primary">Download</button>
+                    <button id="export-clipboard" class="export-btn">Copy to Clipboard</button>
+                    <button id="export-cancel" class="export-btn secondary">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- File Input -->
+    <input type="file" id="hidden-file-input" accept="image/*,.captune" style="display: none;">
+
+    <!-- Scripts -->
+    <script src="canvas-utils.js"></script>
+    <script src="editor.js"></script>
+</body>
+</html>

@@ -1,0 +1,73 @@
+{
+  "manifest_version": 3,
+  "name": "Captune - Professional Screenshot Tool",
+  "version": "1.0.0",
+  "description": "Advanced screenshot extension for developers, QA, documenters, and UI/UX designers with HD capture, visual editor, and batch processing.",
+  "permissions": [
+    "tabs",
+    "downloads",
+    "storage",
+    "scripting",
+    "alarms",
+    "activeTab",
+    "contextMenus",
+    "offscreen"
+  ],
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Captune Screenshot Tool",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "32": "icons/icon32.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["<all_urls>"],
+      "js": ["content.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "options_page": "options.html",
+  "icons": {
+    "16": "icons/icon16.png",
+    "32": "icons/icon32.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  },
+  "commands": {
+    "capture-full-page": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+S"
+      },
+      "description": "Capture full page screenshot"
+    },
+    "capture-mobile-view": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+M"
+      },
+      "description": "Capture mobile view"
+    },
+    "capture-with-links": {
+      "suggested_key": {
+        "default": "Ctrl+Shift+L"
+      },
+      "description": "Capture page with all links"
+    }
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "editor.html",
+        "assets/*",
+        "icons/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

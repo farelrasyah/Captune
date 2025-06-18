@@ -1,0 +1,668 @@
+/* Captune Options Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    background: #f8f9fa;
+    color: #333;
+    line-height: 1.6;
+}
+
+.options-container {
+    display: grid;
+    grid-template-areas:
+        "header header"
+        "nav content"
+        "footer footer";
+    grid-template-columns: 250px 1fr;
+    grid-template-rows: auto 1fr auto;
+    min-height: 100vh;
+}
+
+/* Header */
+.options-header {
+    grid-area: header;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 20px 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.logo-img {
+    width: 32px;
+    height: 32px;
+}
+
+.logo h1 {
+    font-size: 24px;
+    font-weight: 600;
+    margin: 0;
+}
+
+.version {
+    background: rgba(255,255,255,0.2);
+    padding: 4px 12px;
+    border-radius: 16px;
+    font-size: 13px;
+    font-weight: 500;
+}
+
+/* Navigation */
+.options-nav {
+    grid-area: nav;
+    background: white;
+    border-right: 1px solid #e9ecef;
+    padding: 20px 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.nav-tab {
+    display: block;
+    padding: 12px 24px;
+    border: none;
+    background: none;
+    text-align: left;
+    font-size: 14px;
+    font-weight: 500;
+    color: #6c757d;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    border-left: 3px solid transparent;
+}
+
+.nav-tab:hover {
+    background: #f8f9fa;
+    color: #495057;
+}
+
+.nav-tab.active {
+    background: #e3f2fd;
+    color: #1976d2;
+    border-left-color: #1976d2;
+}
+
+/* Content */
+.options-content {
+    grid-area: content;
+    padding: 30px;
+    overflow-y: auto;
+    max-height: calc(100vh - 140px);
+}
+
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+.tab-content h2 {
+    font-size: 28px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 30px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid #e9ecef;
+}
+
+/* Setting Groups */
+.setting-group {
+    background: white;
+    border: 1px solid #e9ecef;
+    border-radius: 8px;
+    padding: 24px;
+    margin-bottom: 24px;
+    box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+}
+
+.setting-group h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 20px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.setting-group h3::before {
+    content: '';
+    width: 4px;
+    height: 20px;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border-radius: 2px;
+}
+
+.setting-item {
+    margin-bottom: 20px;
+    padding-bottom: 16px;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.setting-item:last-child {
+    margin-bottom: 0;
+    padding-bottom: 0;
+    border-bottom: none;
+}
+
+.setting-label {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    cursor: pointer;
+    font-weight: 500;
+    color: #495057;
+}
+
+.setting-label input[type="checkbox"] {
+    width: 18px;
+    height: 18px;
+    accent-color: #667eea;
+    cursor: pointer;
+}
+
+.setting-item label:not(.setting-label) {
+    display: block;
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 8px;
+    font-size: 14px;
+}
+
+.setting-item input[type="text"],
+.setting-item input[type="number"],
+.setting-item select,
+.setting-item textarea {
+    width: 100%;
+    padding: 10px 14px;
+    border: 2px solid #e9ecef;
+    border-radius: 6px;
+    font-size: 14px;
+    transition: border-color 0.2s ease;
+    background: white;
+}
+
+.setting-item input:focus,
+.setting-item select:focus,
+.setting-item textarea:focus {
+    outline: none;
+    border-color: #667eea;
+    box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.setting-item input[type="range"] {
+    width: 100%;
+    margin: 8px 0;
+    accent-color: #667eea;
+    height: 6px;
+    border-radius: 3px;
+}
+
+.setting-description {
+    margin-top: 6px;
+    font-size: 13px;
+    color: #6c757d;
+    line-height: 1.4;
+}
+
+/* Shortcut Items */
+.shortcut-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.shortcut-item:last-child {
+    border-bottom: none;
+}
+
+.shortcut-item label {
+    font-weight: 500;
+    color: #495057;
+    flex: 1;
+}
+
+.shortcut-input {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.shortcut-input input {
+    width: 150px;
+    padding: 6px 10px;
+    border: 1px solid #e9ecef;
+    border-radius: 4px;
+    background: #f8f9fa;
+    font-family: 'Courier New', monospace;
+    font-size: 13px;
+    text-align: center;
+}
+
+.change-shortcut {
+    padding: 6px 12px;
+    border: 1px solid #667eea;
+    border-radius: 4px;
+    background: white;
+    color: #667eea;
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.change-shortcut:hover {
+    background: #667eea;
+    color: white;
+}
+
+/* Context Menu Options */
+.context-menu-options {
+    margin-left: 20px;
+    padding-left: 20px;
+    border-left: 2px solid #e9ecef;
+    transition: opacity 0.2s ease;
+}
+
+/* Action Buttons */
+.action-button {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 20px;
+    border: 2px solid #667eea;
+    border-radius: 6px;
+    background: white;
+    color: #667eea;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    margin-right: 12px;
+    margin-bottom: 8px;
+}
+
+.action-button:hover {
+    background: #667eea;
+    color: white;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+}
+
+.action-button.danger {
+    border-color: #e74c3c;
+    color: #e74c3c;
+}
+
+.action-button.danger:hover {
+    background: #e74c3c;
+    color: white;
+    box-shadow: 0 4px 12px rgba(231, 76, 60, 0.3);
+}
+
+/* Footer */
+.options-footer {
+    grid-area: footer;
+    background: white;
+    border-top: 1px solid #e9ecef;
+    padding: 20px 30px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.footer-actions {
+    display: flex;
+    gap: 12px;
+}
+
+.save-button,
+.cancel-button {
+    padding: 12px 24px;
+    border: 2px solid;
+    border-radius: 6px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    font-size: 14px;
+}
+
+.save-button {
+    background: #27ae60;
+    border-color: #27ae60;
+    color: white;
+}
+
+.save-button:hover {
+    background: #2ecc71;
+    border-color: #2ecc71;
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(46, 204, 113, 0.3);
+}
+
+.cancel-button {
+    background: white;
+    border-color: #95a5a6;
+    color: #95a5a6;
+}
+
+.cancel-button:hover {
+    background: #95a5a6;
+    color: white;
+}
+
+.footer-info {
+    text-align: right;
+}
+
+.footer-info p {
+    margin: 0;
+    font-size: 13px;
+    color: #6c757d;
+}
+
+.footer-info a {
+    color: #667eea;
+    text-decoration: none;
+    font-weight: 500;
+}
+
+.footer-info a:hover {
+    text-decoration: underline;
+}
+
+/* Modal */
+.modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0,0,0,0.6);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 8px;
+    padding: 24px;
+    width: 400px;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.modal-content h3 {
+    font-size: 18px;
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 16px;
+}
+
+.shortcut-display {
+    background: #f8f9fa;
+    border: 2px dashed #dee2e6;
+    border-radius: 6px;
+    padding: 20px;
+    text-align: center;
+    font-family: 'Courier New', monospace;
+    font-size: 16px;
+    font-weight: 600;
+    color: #6c757d;
+    margin: 16px 0;
+    min-height: 60px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+    margin-top: 20px;
+}
+
+.modal-actions button {
+    padding: 8px 16px;
+    border: 1px solid;
+    border-radius: 4px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+#save-shortcut {
+    background: #27ae60;
+    border-color: #27ae60;
+    color: white;
+}
+
+#cancel-shortcut {
+    background: white;
+    border-color: #95a5a6;
+    color: #95a5a6;
+}
+
+.modal-actions button:hover {
+    opacity: 0.8;
+}
+
+/* Notifications */
+.notification {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    padding: 12px 20px;
+    border-radius: 6px;
+    color: white;
+    font-weight: 500;
+    z-index: 1001;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+}
+
+.notification.success {
+    background: #27ae60;
+}
+
+.notification.error {
+    background: #e74c3c;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+    .options-container {
+        grid-template-areas:
+            "header"
+            "nav"
+            "content"
+            "footer";
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto 1fr auto;
+    }
+    
+    .options-nav {
+        flex-direction: row;
+        overflow-x: auto;
+        border-right: none;
+        border-bottom: 1px solid #e9ecef;
+        padding: 0;
+    }
+    
+    .nav-tab {
+        white-space: nowrap;
+        border-left: none;
+        border-bottom: 3px solid transparent;
+        padding: 16px 20px;
+    }
+    
+    .nav-tab.active {
+        border-bottom-color: #1976d2;
+        border-left: none;
+    }
+    
+    .options-content {
+        padding: 20px;
+    }
+    
+    .footer-actions {
+        flex-direction: column;
+        width: 100%;
+    }
+    
+    .options-footer {
+        flex-direction: column;
+        gap: 16px;
+        text-align: center;
+    }
+}
+
+@media (max-width: 768px) {
+    .shortcut-item {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 8px;
+    }
+    
+    .shortcut-input {
+        width: 100%;
+        justify-content: space-between;
+    }
+    
+    .shortcut-input input {
+        flex: 1;
+        max-width: 150px;
+    }
+}
+
+/* Dark theme */
+@media (prefers-color-scheme: dark) {
+    body {
+        background: #1a1a1a;
+        color: #e9ecef;
+    }
+    
+    .options-nav {
+        background: #2d3436;
+        border-color: #636e72;
+    }
+    
+    .nav-tab {
+        color: #b2bec3;
+    }
+    
+    .nav-tab:hover {
+        background: #34495e;
+        color: #ddd;
+    }
+    
+    .nav-tab.active {
+        background: #34495e;
+        color: #74b9ff;
+        border-left-color: #74b9ff;
+    }
+    
+    .options-content {
+        background: #1a1a1a;
+    }
+    
+    .tab-content h2 {
+        color: #ddd;
+        border-color: #636e72;
+    }
+    
+    .setting-group {
+        background: #2d3436;
+        border-color: #636e72;
+    }
+    
+    .setting-group h3 {
+        color: #ddd;
+    }
+    
+    .setting-item input,
+    .setting-item select,
+    .setting-item textarea {
+        background: #34495e;
+        border-color: #636e72;
+        color: #ddd;
+    }
+    
+    .setting-item input:focus,
+    .setting-item select:focus,
+    .setting-item textarea:focus {
+        border-color: #74b9ff;
+        box-shadow: 0 0 0 3px rgba(116, 185, 255, 0.1);
+    }
+    
+    .shortcut-input input {
+        background: #34495e;
+        border-color: #636e72;
+        color: #ddd;
+    }
+    
+    .options-footer {
+        background: #2d3436;
+        border-color: #636e72;
+    }
+    
+    .modal-content {
+        background: #2d3436;
+        color: #ddd;
+    }
+    
+    .shortcut-display {
+        background: #34495e;
+        border-color: #636e72;
+        color: #b2bec3;
+    }
+}
+
+/* Animations */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes slideIn {
+    from { transform: translateX(20px); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+/* Custom scrollbar */
+.options-content::-webkit-scrollbar {
+    width: 8px;
+}
+
+.options-content::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+.options-content::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+}
+
+.options-content::-webkit-scrollbar-thumb:hover {
+    background: #a8a8a8;
+}

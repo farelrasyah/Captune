@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Captune</title>
+    <link rel="stylesheet" href="styles/popup.css">
+</head>
+<body>
+    <div class="container">
+        <header class="header">
+            <div class="logo">
+                <img src="icons/icon48.png" alt="Captune" class="logo-img">
+                <h1>Captune</h1>
+            </div>
+            <div class="version">v1.0.0</div>
+        </header>
+
+        <main class="main-content">
+            <!-- Quick Actions -->
+            <section class="quick-actions">
+                <h2>Quick Capture</h2>
+                <div class="action-grid">
+                    <button id="capture-full" class="action-btn primary">
+                        <span class="icon">📄</span>
+                        <span>Full Page HD</span>
+                    </button>
+                    <button id="capture-visible" class="action-btn">
+                        <span class="icon">🖼️</span>
+                        <span>Visible Area</span>
+                    </button>
+                    <button id="capture-selection" class="action-btn">
+                        <span class="icon">✂️</span>
+                        <span>Selection</span>
+                    </button>
+                    <button id="capture-element" class="action-btn">
+                        <span class="icon">🎯</span>
+                        <span>Element</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Multi-Device Capture -->
+            <section class="device-capture">
+                <h2>Multi-Device Capture</h2>
+                <div class="device-grid">
+                    <button id="capture-desktop" class="device-btn">
+                        <span class="icon">🖥️</span>
+                        <span>Desktop</span>
+                        <small>1920px</small>
+                    </button>
+                    <button id="capture-tablet" class="device-btn">
+                        <span class="icon">📱</span>
+                        <span>Tablet</span>
+                        <small>768px</small>
+                    </button>
+                    <button id="capture-mobile" class="device-btn">
+                        <span class="icon">📱</span>
+                        <span>Mobile</span>
+                        <small>375px</small>
+                    </button>
+                </div>
+                <button id="capture-all-devices" class="action-btn secondary">
+                    <span class="icon">📦</span>
+                    <span>Capture All & Export ZIP</span>
+                </button>
+            </section>
+
+            <!-- Batch Operations -->
+            <section class="batch-operations">
+                <h2>Batch & Auto Capture</h2>
+                <div class="batch-grid">
+                    <button id="capture-links" class="batch-btn">
+                        <span class="icon">🔗</span>
+                        <span>All Links to PDF</span>
+                    </button>
+                    <button id="capture-conversation" class="batch-btn">
+                        <span class="icon">💬</span>
+                        <span>Long Conversation</span>
+                    </button>
+                    <button id="capture-urls" class="batch-btn">
+                        <span class="icon">📋</span>
+                        <span>Multiple URLs</span>
+                    </button>
+                </div>
+            </section>
+
+            <!-- Advanced Options -->
+            <section class="advanced-options">
+                <h2>Advanced Options</h2>
+                <div class="options-grid">
+                    <label class="option-item">
+                        <input type="checkbox" id="include-sticky" checked>
+                        <span>Include Sticky Elements</span>
+                    </label>
+                    <label class="option-item">
+                        <input type="checkbox" id="developer-overlay">
+                        <span>Developer Overlay</span>
+                    </label>
+                    <label class="option-item">
+                        <input type="checkbox" id="retina-quality" checked>
+                        <span>Retina Quality (2x)</span>
+                    </label>
+                    <label class="option-item">
+                        <input type="checkbox" id="auto-expand">
+                        <span>Auto-expand Content</span>
+                    </label>
+                </div>
+                
+                <div class="format-selection">
+                    <label for="output-format">Output Format:</label>
+                    <select id="output-format">
+                        <option value="png">PNG (High Quality)</option>
+                        <option value="jpeg">JPEG (Compressed)</option>
+                        <option value="pdf">PDF Document</option>
+                        <option value="webp">WebP (Modern)</option>
+                    </select>
+                </div>
+            </section>
+        </main>
+
+        <footer class="footer">
+            <button id="open-editor" class="footer-btn">
+                <span class="icon">🎨</span>
+                <span>Visual Editor</span>
+            </button>
+            <button id="open-options" class="footer-btn">
+                <span class="icon">⚙️</span>
+                <span>Settings</span>
+            </button>
+        </footer>
+
+        <!-- Progress Modal -->
+        <div id="progress-modal" class="modal hidden">
+            <div class="modal-content">
+                <div class="progress-container">
+                    <div class="progress-bar">
+                        <div id="progress-fill" class="progress-fill"></div>
+                    </div>
+                    <div id="progress-text" class="progress-text">Preparing capture...</div>
+                    <button id="cancel-capture" class="cancel-btn">Cancel</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="popup.js"></script>
+</body>
+</html>
