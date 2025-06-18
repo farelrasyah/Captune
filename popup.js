@@ -94,67 +94,120 @@ class CaptunePopup {
 
     hideProgress() {
         document.getElementById('progress-modal').classList.add('hidden');
-    }
-
-    async captureFullPage() {
+    }    async captureFullPage() {
         this.showProgress('Capturing full page...');
         
         try {
             const settings = await this.getCurrentSettings();
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             
-            const result = await chrome.tabs.sendMessage(tab.id, {
-                action: 'captureFullPage',
-                settings: settings
-            });
+            // Check if we can inject content script
+            if (!tab.url.startsWith('chrome://') && !tab.url.startsWith('chrome-extension://')) {
+                try {
+                    // Ensure content script is injected
+                    await this.ensureContentScript(tab.id);
+                    
+                    const result = await chrome.tabs.sendMessage(tab.id, {
+                        action: 'captureFullPage',
+                        settings: settings
+                    });
 
-            if (result.success) {
-                this.updateProgress(100, 'Capture complete!');
-                setTimeout(() => {
-                    this.hideProgress();
-                    if (settings.outputFormat === 'pdf') {
-                        this.downloadPDF(result.data);
+                    if (result && result.success) {
+                        this.updateProgress(100, 'Capture complete!');
+                        setTimeout(() => {
+                            this.hideProgress();
+                            if (settings.outputFormat === 'pdf') {
+                                this.downloadPDF(result.data);
+                            } else {
+                                this.downloadImage(result.data, settings.outputFormat);
+                            }
+                        }, 500);
+                        return;
                     } else {
-                        this.downloadImage(result.data, settings.outputFormat);
+                        throw new Error(result?.error || 'Content script capture failed');
                     }
-                }, 500);
+                } catch (contentError) {
+                    console.log('Content script method failed, falling back to simple capture:', contentError.message);
+                    
+                    // Fallback to simple visible capture
+                    const result = await chrome.runtime.sendMessage({
+                        action: 'captureVisible',
+                        options: {
+                            format: settings.outputFormat === 'jpeg' ? 'jpeg' : 'png',
+                            quality: settings.outputFormat === 'jpeg' ? 90 : undefined
+                        }
+                    });
+
+                    if (result && result.success) {
+                        this.updateProgress(100, 'Capture complete (simplified)!');
+                        setTimeout(() => {
+                            this.hideProgress();
+                            this.downloadImage(result.data, settings.outputFormat);
+                        }, 500);
+                        return;
+                    }
+                }
             } else {
-                throw new Error(result.error || 'Capture failed');
+                // Can't inject script on chrome pages, use simple capture
+                const result = await chrome.runtime.sendMessage({
+                    action: 'captureVisible',
+                    options: {
+                        format: settings.outputFormat === 'jpeg' ? 'jpeg' : 'png',
+                        quality: settings.outputFormat === 'jpeg' ? 90 : undefined
+                    }
+                });
+
+                if (result && result.success) {
+                    this.updateProgress(100, 'Capture complete!');
+                    setTimeout(() => {
+                        this.hideProgress();
+                        this.downloadImage(result.data, settings.outputFormat);
+                    }, 500);
+                    return;
+                }
             }
+            
+            throw new Error('All capture methods failed');
         } catch (error) {
             this.hideProgress();
             this.showError('Failed to capture full page: ' + error.message);
         }
-    }
-
-    async captureVisible() {
+    }async captureVisible() {
         this.showProgress('Capturing visible area...');
         
         try {
-            const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
             const settings = await this.getCurrentSettings();
             
-            const dataUrl = await chrome.tabs.captureVisibleTab(null, {
-                format: settings.outputFormat === 'jpeg' ? 'jpeg' : 'png',
-                quality: settings.outputFormat === 'jpeg' ? 90 : undefined
+            // Use background script directly for visible capture (no content script needed)
+            const result = await chrome.runtime.sendMessage({
+                action: 'captureVisible',
+                options: {
+                    format: settings.outputFormat === 'jpeg' ? 'jpeg' : 'png',
+                    quality: settings.outputFormat === 'jpeg' ? 90 : undefined
+                }
             });
 
-            this.updateProgress(100, 'Capture complete!');
-            setTimeout(() => {
-                this.hideProgress();
-                this.downloadImage(dataUrl, settings.outputFormat);
-            }, 500);
+            if (result && result.success) {
+                this.updateProgress(100, 'Capture complete!');
+                setTimeout(() => {
+                    this.hideProgress();
+                    this.downloadImage(result.data, settings.outputFormat);
+                }, 500);
+            } else {
+                throw new Error(result?.error || 'Capture failed');
+            }
         } catch (error) {
             this.hideProgress();
             this.showError('Failed to capture visible area: ' + error.message);
         }
-    }
-
-    async captureSelection() {
+    }async captureSelection() {
         this.showProgress('Select area to capture...');
         
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            
+            // Ensure content script is injected
+            await this.ensureContentScript(tab.id);
             
             await chrome.tabs.sendMessage(tab.id, {
                 action: 'startSelectionMode'
@@ -166,13 +219,14 @@ class CaptunePopup {
             this.hideProgress();
             this.showError('Failed to start selection mode: ' + error.message);
         }
-    }
-
-    async captureElement() {
+    }    async captureElement() {
         this.showProgress('Click on element to capture...');
         
         try {
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            
+            // Ensure content script is injected
+            await this.ensureContentScript(tab.id);
             
             await chrome.tabs.sendMessage(tab.id, {
                 action: 'startElementMode'
@@ -184,14 +238,15 @@ class CaptunePopup {
             this.hideProgress();
             this.showError('Failed to start element mode: ' + error.message);
         }
-    }
-
-    async captureDevice(deviceType) {
+    }    async captureDevice(deviceType) {
         this.showProgress(`Capturing ${deviceType} view...`);
         
         try {
             const settings = await this.getCurrentSettings();
             const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+            
+            // Ensure content script is injected
+            await this.ensureContentScript(tab.id);
             
             const deviceSettings = this.getDeviceSettings(deviceType);
             
@@ -201,14 +256,14 @@ class CaptunePopup {
                 settings: settings
             });
 
-            if (result.success) {
+            if (result && result.success) {
                 this.updateProgress(100, `${deviceType} capture complete!`);
                 setTimeout(() => {
                     this.hideProgress();
                     this.downloadImage(result.data, settings.outputFormat);
                 }, 500);
             } else {
-                throw new Error(result.error || 'Device capture failed');
+                throw new Error(result?.error || 'Device capture failed');
             }
         } catch (error) {
             this.hideProgress();
@@ -456,9 +511,9 @@ class CaptunePopup {
             };
             chrome.tabs.onUpdated.addListener(listener);
         });
-    }
-
-    showError(message) {
+    }    showError(message) {
+        console.error('Captune Error:', message);
+        
         // Simple error notification
         const errorDiv = document.createElement('div');
         errorDiv.className = 'error-notification';
@@ -468,6 +523,45 @@ class CaptunePopup {
         setTimeout(() => {
             errorDiv.remove();
         }, 5000);
+    }async ensureContentScript(tabId) {
+        try {
+            console.log('Checking content script for tab:', tabId);
+            
+            // Try to ping the content script first
+            const pingResult = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+            console.log('Content script ping result:', pingResult);
+            
+            if (pingResult && pingResult.success) {
+                console.log('Content script is already active');
+                return;
+            }
+        } catch (error) {
+            console.log('Content script not responding, injecting...', error.message);
+            
+            // If ping fails, inject the content script
+            try {
+                await chrome.scripting.executeScript({
+                    target: { tabId: tabId },
+                    files: ['content.js']
+                });
+                
+                console.log('Content script injected, waiting for initialization...');
+                
+                // Wait for script to initialize
+                await new Promise(resolve => setTimeout(resolve, 500));
+                
+                // Try ping again after injection
+                try {
+                    const secondPing = await chrome.tabs.sendMessage(tabId, { action: 'ping' });
+                    console.log('Content script ping after injection:', secondPing);
+                } catch (pingError) {
+                    console.log('Content script still not responding after injection:', pingError.message);
+                }
+            } catch (injectError) {
+                console.error('Failed to inject content script:', injectError);
+                throw new Error('Failed to inject content script: ' + injectError.message);
+            }
+        }
     }
 }
 

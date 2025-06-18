@@ -135,14 +135,20 @@ class CaptuneBackground {
         } catch (error) {
             console.error('Failed to initialize settings:', error);
         }
-    }
+    }    async handleMessage(request, sender, sendResponse) {
+        try {            switch (request.action) {
+                case 'ping':
+                    sendResponse({ success: true, message: 'Background script is working' });
+                    break;
 
-    async handleMessage(request, sender, sendResponse) {
-        try {
-            switch (request.action) {
                 case 'captureTab':
                     const result = await this.captureTab(request.tabId, request.options);
                     sendResponse({ success: true, data: result });
+                    break;
+
+                case 'captureVisible':
+                    const visibleResult = await this.captureTab(null, request.options);
+                    sendResponse({ success: true, data: visibleResult });
                     break;
 
                 case 'createOffscreenDocument':
@@ -153,9 +159,12 @@ class CaptuneBackground {
                 case 'processImage':
                     const processed = await this.processImage(request.imageData, request.options);
                     sendResponse({ success: true, data: processed });
+                    break;                case 'downloadFile':
+                    await this.downloadFile(request.data, request.filename);
+                    sendResponse({ success: true });
                     break;
 
-                case 'downloadFile':
+                case 'downloadImage':
                     await this.downloadFile(request.data, request.filename);
                     sendResponse({ success: true });
                     break;

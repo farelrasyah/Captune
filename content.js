@@ -6,6 +6,7 @@ class CaptuneContent {
         this.elementMode = false;
         this.setupMessageListener();
         this.createOverlayElements();
+        console.log('Captune content script initialized');
     }
 
     setupMessageListener() {
@@ -13,11 +14,13 @@ class CaptuneContent {
             this.handleMessage(request, sender, sendResponse);
             return true; // Will respond asynchronously
         });
-    }
-
-    async handleMessage(request, sender, sendResponse) {
+    }async handleMessage(request, sender, sendResponse) {
         try {
             switch (request.action) {
+                case 'ping':
+                    sendResponse({ success: true, message: 'Content script is ready' });
+                    break;
+
                 case 'captureFullPage':
                     const fullPageResult = await this.captureFullPage(request.settings);
                     sendResponse(fullPageResult);
@@ -143,27 +146,29 @@ class CaptuneContent {
         } finally {
             this.isCapturing = false;
         }
-    }
-
-    async captureVisible(settings) {
+    }    async captureVisible(settings) {
         try {
             // Add developer overlay if requested
             if (settings.developerOverlay) {
                 this.addDeveloperOverlay();
             }
 
-            // Capture visible area using chrome API
-            const dataUrl = await chrome.runtime.sendMessage({
-                action: 'captureTab',
-                tabId: chrome.runtime.sendMessage.tabId,
+            // Send message to background script to capture visible area
+            const result = await chrome.runtime.sendMessage({
+                action: 'captureVisible',
                 options: {
-                    format: settings.outputFormat,
+                    format: settings.outputFormat === 'jpeg' ? 'jpeg' : 'png',
                     quality: settings.jpegQuality || 90
                 }
             });
 
             this.cleanup();
-            return { success: true, data: dataUrl };
+            
+            if (result.success) {
+                return { success: true, data: result.data };
+            } else {
+                throw new Error(result.error || 'Capture failed');
+            }
         } catch (error) {
             this.cleanup();
             return { success: false, error: error.message };
@@ -324,9 +329,7 @@ class CaptuneContent {
             document.removeEventListener('keydown', this.elementListeners.onKeyDown);
             this.elementListeners = null;
         }
-    }
-
-    async performFullPageCapture(dimensions, settings) {
+    }    async performFullPageCapture(dimensions, settings) {
         const captures = [];
         const viewportHeight = window.innerHeight;
         const scrollStep = viewportHeight - 100; // Overlap for better stitching
@@ -337,20 +340,24 @@ class CaptuneContent {
             window.scrollTo(0, currentScroll);
             await this.waitForScroll();
 
-            // Capture current viewport
-            const dataUrl = await chrome.runtime.sendMessage({
-                action: 'captureTab',
+            // Capture current viewport using background script
+            const result = await chrome.runtime.sendMessage({
+                action: 'captureVisible',
                 options: {
                     format: 'png',
                     quality: 100
                 }
             });
 
-            captures.push({
-                dataUrl: dataUrl,
-                scrollY: currentScroll,
-                viewportHeight: viewportHeight
-            });
+            if (result.success) {
+                captures.push({
+                    dataUrl: result.data,
+                    scrollY: currentScroll,
+                    viewportHeight: viewportHeight
+                });
+            } else {
+                throw new Error('Failed to capture viewport at scroll ' + currentScroll);
+            }
 
             currentScroll += scrollStep;
         }
@@ -478,71 +485,69 @@ class CaptuneContent {
     }
 
     addDeveloperOverlay() {
-        // Create CSS for developer overlay
-        const style = document.createElement('style');
-        style.textContent = `
-            .captune-dev-overlay * {
-                outline: 1px solid rgba(255, 0, 0, 0.3) !important;
-                position: relative !important;
-            }
-            .captune-dev-overlay *::before {
-                content: attr(class) " | " attr(id);
-                position: absolute !important;
-                top: 0 !important;
-                left: 0 !important;
-                background: rgba(0, 0, 0, 0.8) !important;
-                color: white !important;
-                font-size: 10px !important;
-                padding: 2px 4px !important;
-                z-index: 999999 !important;
-                white-space: nowrap !important;
-            }
-        `;
-        document.head.appendChild(style);
-        document.body.classList.add('captune-dev-overlay');
-        
-        this.devOverlayStyle = style;
-    }
+        // Create grid overlay
+        if (!document.getElementById('captune-grid-overlay')) {
+            const overlay = document.createElement('div');
+            overlay.id = 'captune-grid-overlay';
+            overlay.style.cssText = `
+                position: fixed;
+                top: 0;
+                left: 0;
+                width: 100%;
+                height: 100%;
+                pointer-events: none;
+                z-index: 999997;
+                background-image: 
+                    linear-gradient(to right, rgba(255,0,0,0.1) 1px, transparent 1px),
+                    linear-gradient(to bottom, rgba(255,0,0,0.1) 1px, transparent 1px);
+                background-size: 10px 10px;
+            `;
+            document.body.appendChild(overlay);
+        }
 
-    hideStickyElements() {
-        const stickyElements = document.querySelectorAll('*');
-        this.hiddenElements = [];
-
-        stickyElements.forEach(element => {
-            const style = window.getComputedStyle(element);
-            if (style.position === 'fixed' || style.position === 'sticky') {
-                this.hiddenElements.push({
-                    element: element,
-                    originalDisplay: element.style.display
-                });
-                element.style.display = 'none';
+        // Add element outlines
+        const allElements = document.querySelectorAll('*');
+        allElements.forEach(el => {
+            if (!el.hasAttribute('data-captune-outlined')) {
+                el.style.outline = '1px solid rgba(0,255,0,0.3)';
+                el.setAttribute('data-captune-outlined', 'true');
             }
         });
     }
 
+    hideStickyElements() {
+        const stickyElements = document.querySelectorAll('[style*="position: fixed"], [style*="position: sticky"]');
+        stickyElements.forEach(el => {
+            el.style.visibility = 'hidden';
+            el.setAttribute('data-captune-hidden', 'true');
+        });
+    }
+
     cleanup() {
-        // Restore hidden sticky elements
-        if (this.hiddenElements) {
-            this.hiddenElements.forEach(({ element, originalDisplay }) => {
-                element.style.display = originalDisplay;
-            });
-            this.hiddenElements = null;
-        }
-
         // Remove developer overlay
-        if (this.devOverlayStyle) {
-            this.devOverlayStyle.remove();
-            document.body.classList.remove('captune-dev-overlay');
-            this.devOverlayStyle = null;
+        const overlay = document.getElementById('captune-grid-overlay');
+        if (overlay) {
+            overlay.remove();
         }
 
-        // End any active modes
-        if (this.selectionMode) {
-            this.endSelectionMode();
-        }
-        if (this.elementMode) {
-            this.endElementMode();
-        }
+        // Restore hidden sticky elements
+        const hiddenElements = document.querySelectorAll('[data-captune-hidden="true"]');
+        hiddenElements.forEach(el => {
+            el.style.visibility = '';
+            el.removeAttribute('data-captune-hidden');
+        });
+
+        // Remove element outlines
+        const outlinedElements = document.querySelectorAll('[data-captune-outlined="true"]');
+        outlinedElements.forEach(el => {
+            el.style.outline = '';
+            el.removeAttribute('data-captune-outlined');
+        });
+
+        // Reset body styles
+        document.body.style.width = '';
+        document.body.style.minHeight = '';
+        document.body.style.cursor = '';
     }
 
     // Utility methods
@@ -567,26 +572,12 @@ class CaptuneContent {
         };
     }
 
-    async setViewportSize(width, height) {
-        // This would require cooperation with the extension to resize the browser window
-        // For now, we'll use CSS transforms to simulate different viewport sizes
-        const scale = Math.min(window.innerWidth / width, window.innerHeight / height);
-        document.body.style.transform = `scale(${scale})`;
-        document.body.style.transformOrigin = 'top left';
-        document.body.style.width = width + 'px';
-        document.body.style.height = height + 'px';
-    }
-
     async waitForScroll() {
         return new Promise(resolve => setTimeout(resolve, 100));
     }
 
-    async waitForContent() {
-        return new Promise(resolve => setTimeout(resolve, 500));
-    }
-
     async waitForLayoutStable() {
-        return new Promise(resolve => setTimeout(resolve, 1000));
+        return new Promise(resolve => setTimeout(resolve, 300));
     }
 
     async loadImage(dataUrl) {
@@ -627,20 +618,80 @@ class CaptuneContent {
         // Scroll back to top
         window.scrollTo(0, 0);
         await this.waitForScroll();
-    }
+    }    async captureSelection(rect) {
+        try {
+            // Capture visible area first
+            const result = await chrome.runtime.sendMessage({
+                action: 'captureVisible',
+                options: {
+                    format: 'png',
+                    quality: 100
+                }
+            });
 
-    async captureSelection(rect) {
-        // Capture the selected area
-        // This would involve cropping the full page capture to the selection
-        console.log('Capturing selection:', rect);
-        // Implementation would involve canvas manipulation
+            if (result.success) {
+                // Crop to selection
+                const croppedImage = await this.cropImage(result.data, rect);
+                
+                // Download the cropped image
+                const settings = await chrome.storage.sync.get({
+                    outputFormat: 'png'
+                });
+                
+                chrome.runtime.sendMessage({
+                    action: 'downloadImage',
+                    data: croppedImage,
+                    filename: `captune-selection-${Date.now()}.${settings.outputFormat}`
+                });
+            }
+        } catch (error) {
+            console.error('Failed to capture selection:', error);
+        }
     }
 
     async captureClickedElement(element) {
-        // Capture specific element
-        const rect = element.getBoundingClientRect();
-        console.log('Capturing element:', element, rect);
-        // Implementation would involve element-specific capture
+        try {
+            // Get element bounds with scroll offset
+            const rect = element.getBoundingClientRect();
+            const scrollRect = {
+                left: rect.left + window.scrollX,
+                top: rect.top + window.scrollY,
+                width: rect.width,
+                height: rect.height
+            };
+
+            // Ensure element is in viewport
+            element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            await this.waitForScroll();
+
+            // Capture visible area
+            const result = await chrome.runtime.sendMessage({
+                action: 'captureVisible',
+                options: {
+                    format: 'png',
+                    quality: 100
+                }
+            });
+
+            if (result.success) {
+                // Crop to element bounds
+                const elementRect = element.getBoundingClientRect();
+                const croppedImage = await this.cropImage(result.data, elementRect);
+                
+                // Download the element image
+                const settings = await chrome.storage.sync.get({
+                    outputFormat: 'png'
+                });
+                
+                chrome.runtime.sendMessage({
+                    action: 'downloadImage',
+                    data: croppedImage,
+                    filename: `captune-element-${Date.now()}.${settings.outputFormat}`
+                });
+            }
+        } catch (error) {
+            console.error('Failed to capture element:', error);
+        }
     }
 
     async captureSpecificElement(selector, settings) {
@@ -686,4 +737,17 @@ class CaptuneContent {
 }
 
 // Initialize content script
-new CaptuneContent();
+if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => {
+        window.captuneContent = new CaptuneContent();
+    });
+} else {
+    window.captuneContent = new CaptuneContent();
+}
+
+// Also initialize immediately if document is already complete
+if (document.readyState === 'complete') {
+    if (!window.captuneContent) {
+        window.captuneContent = new CaptuneContent();
+    }
+}
